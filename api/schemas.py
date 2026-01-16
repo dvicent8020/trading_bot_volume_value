@@ -89,6 +89,11 @@ class BacktestConfigRequest(BaseModel):
     adx_threshold: float = 25.0
     max_volatility_multiplier: Optional[float] = None
     
+    # Nuevos parámetros optimizados (2026-01-16)
+    adx_slope_enabled: bool = True  # ⚠️ CRÍTICO para rentabilidad
+    use_normalized_cvd: bool = True  # CVD normalizado
+    signal_cooldown: int = 5  # Velas entre señales
+    
     # Parámetros específicos de Funnel Logic
     ema_period: Optional[int] = 200  # Para Funnel Logic
     delta_confirmation_candles: Optional[int] = 2  # Para Funnel Logic

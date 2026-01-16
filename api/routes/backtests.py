@@ -89,14 +89,18 @@ def run_backtest_task(config: BacktestConfigRequest, backtest_id: int):
                 'vwap_period_days': config.vwap_period_days or 7,
                 'volume_profile_period': config.volume_profile_period or 7,
                 'value_area_percent': config.value_area_percent or 0.68,
-                'delta_lookback': config.delta_lookback_vv or 20,  # delta_lookback es el nombre correcto en VolumeValueStrategy
+                'delta_lookback': config.delta_lookback_vv or 20,
                 'volatility_threshold': config.volatility_threshold or 3.0,
                 'min_volume_period': config.min_volume_period or 20,
                 'lvn_lookback': config.lvn_lookback or 50,
-                # Agregar parámetros de filtros ATR y ADX (gestión de riesgo cuantitativa)
-                'market_regime_enabled': config.market_regime_enabled if config.market_regime_enabled is not None else True,  # Activado por defecto
+                # Filtros ADX (gestión de riesgo cuantitativa)
+                'market_regime_enabled': config.market_regime_enabled if config.market_regime_enabled is not None else True,
                 'adx_period': config.adx_period if config.adx_period is not None else 14,
-                'adx_threshold': config.adx_threshold if config.adx_threshold is not None else 30.0  # 30.0 por defecto (config conservadora)
+                'adx_threshold': config.adx_threshold if config.adx_threshold is not None else 25.0,
+                # ⚠️ Nuevos parámetros optimizados (CRÍTICOS para rentabilidad)
+                'adx_slope_enabled': config.adx_slope_enabled if hasattr(config, 'adx_slope_enabled') else True,
+                'use_normalized_cvd': config.use_normalized_cvd if hasattr(config, 'use_normalized_cvd') else True,
+                'signal_cooldown': config.signal_cooldown if hasattr(config, 'signal_cooldown') else 5,
             }
         else:
             raise ValueError(f"Tipo de estrategia no soportado: {strategy_type}")

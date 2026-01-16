@@ -18,77 +18,111 @@ def setup_logging(log_level: str = 'INFO'):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-def get_risk_config(symbol: str, timeframe: str = '1d', leverage_mode: str = 'conservador'):
+def get_risk_config(symbol: str, timeframe: str = '1h', leverage_mode: str = '2x'):
     """
     Retorna configuración de riesgo optimizada.
     
-    BTC/USDT: Configuración optimizada basada en análisis del 2026-01-15
+    CONFIGURACIÓN OPTIMIZADA 2026-01-16:
+    - Timeframe óptimo: 1H (mejor balance retorno/drawdown)
+    - ADX Slope habilitado (crítico para rentabilidad)
+    - Parámetros ajustados por nivel de leverage
     
     Modos de leverage disponibles:
-    - 'conservador': 3x leverage, mejor balance riesgo/retorno (Sharpe 2.01, DD -28%)
-    - 'balanceado': 5x leverage, mayor retorno con más riesgo (Sharpe 2.01, DD -74%)
-    - 'agresivo': 5x/10x leverage según timeframe
+    - '2x': Óptimo para bajo drawdown (DD ~7-8%, Sharpe ~0.97)
+    - '3x': Balance riesgo/retorno (DD ~13%, Sharpe ~0.91, Retorno ~70%)
+    - '5x': Mayor retorno, mayor riesgo (DD ~20-25%)
+    - '10x': Agresivo, requiere stops muy ajustados (DD ~30-40%)
     
-    Para 4H solo SHORTs: 10x es viable (100% win rate, Sharpe 3.40)
-    
-    Altcoins: Configuración conservadora
+    Resultados de pruebas 1H-90 días:
+    - 2x: +44.8%, Sharpe 0.97, DD -7.6%
+    - 3x: +70.7%, Sharpe 0.91, DD -13.5%
     """
+    
+    # Configuraciones por leverage para BTC/USDT
+    # Fórmula: A mayor leverage, stops más ajustados
+    leverage_configs = {
+        '2x': {
+            'leverage': 2.0,
+            'stop_loss_pct': 0.02,           # 2%
+            'trailing_stop_activation': 0.015,  # 1.5%
+            'trailing_stop_distance': 0.005,    # 0.5%
+        },
+        '3x': {
+            'leverage': 3.0,
+            'stop_loss_pct': 0.02,           # 2% (ajustado para 3x)
+            'trailing_stop_activation': 0.015,  # 1.5%
+            'trailing_stop_distance': 0.005,    # 0.5%
+        },
+        '5x': {
+            'leverage': 5.0,
+            'stop_loss_pct': 0.015,          # 1.5% (más ajustado)
+            'trailing_stop_activation': 0.012,  # 1.2%
+            'trailing_stop_distance': 0.004,    # 0.4%
+        },
+        '10x': {
+            'leverage': 10.0,
+            'stop_loss_pct': 0.008,          # 0.8% (muy ajustado)
+            'trailing_stop_activation': 0.008,  # 0.8%
+            'trailing_stop_distance': 0.003,    # 0.3%
+        },
+    }
+    
+    # Obtener configuración de leverage
+    cfg = leverage_configs.get(leverage_mode, leverage_configs['2x'])
+    
     if symbol == 'BTC/USDT':
-        # Configuraciones base por modo de leverage
-        if timeframe == '4h':
-            # En 4H solo SHORTs funcionan (100% win rate), podemos usar más leverage
-            configs = {
-                'conservador': {'lev': 3.0, 'sl': 0.05, 'ta': 0.03, 'td': 0.01},
-                'balanceado': {'lev': 5.0, 'sl': 0.05, 'ta': 0.03, 'td': 0.01},
-                'agresivo': {'lev': 10.0, 'sl': 0.02, 'ta': 0.02, 'td': 0.005},
-            }
-        else:  # 1d
-            configs = {
-                'conservador': {'lev': 3.0, 'sl': 0.05, 'ta': 0.03, 'td': 0.01},
-                'balanceado': {'lev': 5.0, 'sl': 0.05, 'ta': 0.03, 'td': 0.01},
-                'agresivo': {'lev': 5.0, 'sl': 0.06, 'ta': 0.03, 'td': 0.008},
-            }
-        
-        cfg = configs.get(leverage_mode, configs['conservador'])
-        
         return {
-            'leverage': cfg['lev'],
-            'trailing_stop_activation': cfg['ta'],
-            'trailing_stop_distance': cfg['td'],
-            'stop_loss_pct': cfg['sl'],
-            'take_profit_pct': 0.15,
+            # Parámetros de riesgo (ajustados por leverage)
+            'leverage': cfg['leverage'],
+            'trailing_stop_activation': cfg['trailing_stop_activation'],
+            'trailing_stop_distance': cfg['trailing_stop_distance'],
+            'stop_loss_pct': cfg['stop_loss_pct'],
+            'take_profit_pct': 0.06,
+            # ATR (filtro adicional)
             'use_atr': True,
             'atr_period': 14,
-            'atr_multiplier': 2.0,
+            'atr_multiplier': 1.5,
+            # Filtro de régimen de mercado (ADX)
             'market_regime_enabled': True,
             'adx_period': 14,
-            'adx_threshold': 20.0,
-            'signal_cooldown': 3,
-            # Nuevos filtros de mejora
-            'disable_longs': timeframe == '4h',  # Deshabilitar LONGs en 4H (0% win rate)
+            'adx_threshold': 25.0,
+            # ⚠️ ADX SLOPE - CRÍTICO para rentabilidad
+            'adx_slope_enabled': True,
+            'adx_slope_period': 5,
+            # CVD Normalizado (mejora señales)
+            'use_normalized_cvd': True,
+            # Cooldown entre señales
+            'signal_cooldown': 5,
+            # Filtros LONG/SHORT
+            'disable_longs': False,  # LONGs habilitados
             'disable_shorts': False,
-            'require_uptrend_for_longs': True,
+            'require_uptrend_for_longs': False,
             'trend_filter_period': 50,
-            # TP Parcial
+            # TP Parcial (deshabilitado por defecto)
             'tp_dynamic_enabled': False,
             'tp_partial_pct': None,
             'tp_atr_multiplier': None,
             'tp_vwap_band': None
         }
-    else:  # ETH, SOL, XRP
+    else:  # Altcoins (ETH, SOL, XRP)
+        # Altcoins: leverage más conservador
+        alt_leverage = min(cfg['leverage'], 3.0)  # Máximo 3x para altcoins
         return {
-            'leverage': 3.0,
-            'trailing_stop_activation': 0.03,
-            'trailing_stop_distance': 0.012,
-            'stop_loss_pct': 0.05,
-            'take_profit_pct': 0.12,
+            'leverage': alt_leverage,
+            'trailing_stop_activation': cfg['trailing_stop_activation'] * 1.2,  # 20% más holgado
+            'trailing_stop_distance': cfg['trailing_stop_distance'] * 1.5,  # 50% más holgado
+            'stop_loss_pct': cfg['stop_loss_pct'] * 1.5,  # 50% más holgado
+            'take_profit_pct': 0.08,
             'use_atr': True,
             'atr_period': 14,
             'atr_multiplier': 2.0,
             'market_regime_enabled': True,
             'adx_period': 14,
-            'adx_threshold': 20.0,
-            'signal_cooldown': 3,
+            'adx_threshold': 25.0,
+            'adx_slope_enabled': True,
+            'adx_slope_period': 5,
+            'use_normalized_cvd': True,
+            'signal_cooldown': 5,
             'disable_longs': False,
             'disable_shorts': False,
             'require_uptrend_for_longs': False,
@@ -155,8 +189,8 @@ def run_test(symbol: str, timeframe: str, days: int = None, start_date: datetime
         logger.info(f"Precio final: ${data['close'].iloc[-1]:,.2f}")
         
         # Configuración VolumeValueStrategy con filtros de riesgo cuantitativo
-        # Ajustar período de VWAP según timeframe (7 días para 1D = semanal)
-        vwap_period = 7 if timeframe == '1D' else 7
+        # Ajustar período de VWAP según timeframe
+        vwap_period = 7 if timeframe in ['1d', '1D'] else 7
         strategy = VolumeValueStrategy(
             vwap_period_days=vwap_period,  # VWAP semanal
             volume_profile_period=7,  # Volume Profile semanal
@@ -165,16 +199,22 @@ def run_test(symbol: str, timeframe: str, days: int = None, start_date: datetime
             volatility_threshold=3.0,  # 300% del promedio
             min_volume_period=20,  # Período para promedio de volumen
             lvn_lookback=50,  # Período para detectar LVN
-            market_regime_enabled=risk_config['market_regime_enabled'],  # Filtro ADX
+            # Filtro ADX (régimen de mercado)
+            market_regime_enabled=risk_config['market_regime_enabled'],
             adx_period=risk_config['adx_period'],
             adx_threshold=risk_config['adx_threshold'],
-            # Configuración simplificada
-            signal_cooldown=risk_config.get('signal_cooldown', 3),
+            # ⚠️ ADX SLOPE - CRÍTICO para rentabilidad
+            adx_slope_enabled=risk_config.get('adx_slope_enabled', True),
+            adx_slope_period=risk_config.get('adx_slope_period', 5),
+            # CVD Normalizado
+            use_normalized_cvd=risk_config.get('use_normalized_cvd', True),
+            # Cooldown entre señales
+            signal_cooldown=risk_config.get('signal_cooldown', 5),
             # Filtros deshabilitados
             min_signal_strength=0.0,
             volume_confirmation_enabled=False,
             long_filters_enabled=False,
-            # Nuevos filtros de mejora
+            # Filtros LONG/SHORT
             disable_longs=risk_config.get('disable_longs', False),
             disable_shorts=risk_config.get('disable_shorts', False),
             require_uptrend_for_longs=risk_config.get('require_uptrend_for_longs', False),
