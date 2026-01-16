@@ -50,7 +50,10 @@ class Backtester:
         tp_vwap_band: float = None,
         strategy_instance: Any = None,  # VolumeValueStrategy instance para acceder a métodos
         exhaustion_exit_enabled: bool = False,  # Salida por divergencia de exhaustion
-        exhaustion_lookback: int = 10  # Período para detectar exhaustion
+        exhaustion_lookback: int = 10,  # Período para detectar exhaustion
+        # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
+        trailing_atr_enabled: bool = False,  # Usar ATR para trailing stop en lugar de porcentaje fijo
+        trailing_atr_multiplier: float = 2.5  # Multiplicador ATR para distancia del trailing stop
     ):
         """
         Inicializa el Backtester.
@@ -130,6 +133,10 @@ class Backtester:
         # Exhaustion Exit (Salida por divergencia CVD)
         self.exhaustion_exit_enabled = exhaustion_exit_enabled
         self.exhaustion_lookback = exhaustion_lookback
+        
+        # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
+        self.trailing_atr_enabled = trailing_atr_enabled
+        self.trailing_atr_multiplier = trailing_atr_multiplier
         
         # Hard stop de emergencia: activar automáticamente si no hay stop_loss_pct y hay leverage alto
         # Para evitar liquidaciones, usar un porcentaje seguro basado en leverage
@@ -435,12 +442,23 @@ class Backtester:
                             not trailing_stop_active and 
                             current_profit_pct >= self.trailing_stop_activation):
                             trailing_stop_active = True
-                            trailing_stop_price = highest_price * (1 - self.trailing_stop_distance)
-                            logger.debug(f"Trailing stop LARGO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
+                            # MEJORA: Trailing Stop basado en ATR si está habilitado
+                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
+                                trailing_stop_price = highest_price - trailing_distance
+                                logger.debug(f"Trailing stop LARGO (ATR) activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}, ATR_dist={trailing_distance:.2f}")
+                            else:
+                                trailing_stop_price = highest_price * (1 - self.trailing_stop_distance)
+                                logger.debug(f"Trailing stop LARGO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and self.trailing_stop_distance is not None:
-                            new_trailing_stop = highest_price * (1 - self.trailing_stop_distance)
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled):
+                            # MEJORA: Usar ATR para distancia si está habilitado
+                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
+                                new_trailing_stop = highest_price - trailing_distance
+                            else:
+                                new_trailing_stop = highest_price * (1 - self.trailing_stop_distance)
                             if new_trailing_stop > trailing_stop_price:
                                 trailing_stop_price = new_trailing_stop
                                 logger.debug(f"Trailing stop LARGO actualizado en {results.index[i]}: nuevo={trailing_stop_price:.2f}")
@@ -645,12 +663,23 @@ class Backtester:
                             not trailing_stop_active and 
                             current_profit_pct >= self.trailing_stop_activation):
                             trailing_stop_active = True
-                            trailing_stop_price = lowest_price * (1 + self.trailing_stop_distance)
-                            logger.debug(f"Trailing stop CORTO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
+                            # MEJORA: Trailing Stop basado en ATR si está habilitado
+                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
+                                trailing_stop_price = lowest_price + trailing_distance
+                                logger.debug(f"Trailing stop CORTO (ATR) activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}, ATR_dist={trailing_distance:.2f}")
+                            else:
+                                trailing_stop_price = lowest_price * (1 + self.trailing_stop_distance)
+                                logger.debug(f"Trailing stop CORTO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and self.trailing_stop_distance is not None:
-                            new_trailing_stop = lowest_price * (1 + self.trailing_stop_distance)
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled):
+                            # MEJORA: Usar ATR para distancia si está habilitado
+                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
+                                new_trailing_stop = lowest_price + trailing_distance
+                            else:
+                                new_trailing_stop = lowest_price * (1 + self.trailing_stop_distance)
                             if new_trailing_stop < trailing_stop_price:
                                 trailing_stop_price = new_trailing_stop
                                 logger.debug(f"Trailing stop CORTO actualizado en {results.index[i]}: nuevo={trailing_stop_price:.2f}")

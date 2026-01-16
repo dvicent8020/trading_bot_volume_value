@@ -61,7 +61,12 @@ class VolumeValueStrategy(Strategy):
         disable_longs: bool = False,  # Deshabilitar completamente señales LONG
         disable_shorts: bool = False,  # Deshabilitar completamente señales SHORT
         trend_filter_period: int = 50,  # Período para calcular tendencia mayor (SMA)
-        require_uptrend_for_longs: bool = False  # Solo permitir LONGs si precio > SMA(trend_filter_period)
+        require_uptrend_for_longs: bool = False,  # Solo permitir LONGs si precio > SMA(trend_filter_period)
+        # MEJORAS DEL EXPERTO
+        use_normalized_cvd: bool = True,  # Usar CVD normalizado (CVD / Volumen total)
+        dynamic_vp_period: int = 200,  # Volume Profile dinámico (últimas N velas)
+        adx_slope_enabled: bool = False,  # Requerir pendiente positiva del ADX
+        adx_slope_period: int = 5  # Período para calcular pendiente del ADX
     ):
         """
         Inicializa la estrategia VolumeValueStrategy.
@@ -111,6 +116,12 @@ class VolumeValueStrategy(Strategy):
         self.disable_shorts = disable_shorts
         self.trend_filter_period = trend_filter_period
         self.require_uptrend_for_longs = require_uptrend_for_longs
+        
+        # MEJORAS DEL EXPERTO
+        self.use_normalized_cvd = use_normalized_cvd
+        self.dynamic_vp_period = dynamic_vp_period
+        self.adx_slope_enabled = adx_slope_enabled
+        self.adx_slope_period = adx_slope_period
         
         logger.info(
             f"VolumeValueStrategy inicializada: VWAP={vwap_period_days}d, "
@@ -361,6 +372,85 @@ class VolumeValueStrategy(Strategy):
         cvd = delta.cumsum()
         
         return cvd
+    
+    def calculate_cvd_normalized(
+        self,
+        data: pd.DataFrame,
+        lookback: int = 20
+    ) -> pd.Series:
+        """
+        Calcula CVD Normalizado (CVD / Volumen Total del período).
+        
+        MEJORA DEL EXPERTO: El CVD normalizado es comparable entre activos y períodos.
+        Retorna valores entre -1 y 1 donde:
+        - +1 = 100% volumen de compra
+        - -1 = 100% volumen de venta
+        - 0 = equilibrio
+        
+        Args:
+            data: DataFrame con 'close', 'high', 'low', 'volume', 'open'.
+            lookback: Período para normalizar (default: 20 velas).
+            
+        Returns:
+            Series con valores de CVD normalizado (-1 a +1).
+        """
+        if 'open' not in data.columns:
+            data = data.copy()
+            data['open'] = data['close'].shift(1).fillna(data['close'])
+        
+        # Calcular delta por vela
+        price_change = data['close'] - data['open']
+        price_range = data['high'] - data['low']
+        price_range = price_range.replace(0, 1)  # Evitar división por cero
+        
+        delta_ratio = price_change / price_range
+        delta_ratio = delta_ratio.clip(-1, 1)
+        
+        delta = data['volume'] * delta_ratio
+        
+        # CVD rolling (suma de delta en el lookback)
+        cvd_rolling = delta.rolling(window=lookback, min_periods=1).sum()
+        
+        # Volumen total rolling (para normalizar)
+        volume_rolling = data['volume'].rolling(window=lookback, min_periods=1).sum()
+        
+        # CVD normalizado = CVD / Volumen Total
+        cvd_normalized = cvd_rolling / volume_rolling.replace(0, 1)
+        
+        # Limitar entre -1 y 1
+        cvd_normalized = cvd_normalized.clip(-1, 1)
+        
+        return cvd_normalized
+    
+    def calculate_adx_with_slope(
+        self,
+        high: pd.Series,
+        low: pd.Series,
+        close: pd.Series,
+        period: int = 14,
+        slope_period: int = 5
+    ) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calcula ADX con su pendiente.
+        
+        MEJORA DEL EXPERTO: ADX con pendiente positiva indica tendencia fortaleciéndose.
+        
+        Args:
+            high: Series de precios máximos.
+            low: Series de precios mínimos.
+            close: Series de precios de cierre.
+            period: Período para ADX (default: 14).
+            slope_period: Período para calcular pendiente (default: 5).
+            
+        Returns:
+            Tuple (adx, adx_slope) donde adx_slope > 0 indica tendencia fortaleciéndose.
+        """
+        adx = self.calculate_adx(high, low, close, period)
+        
+        # Calcular pendiente del ADX (cambio en N períodos)
+        adx_slope = adx.diff(slope_period) / slope_period
+        
+        return adx, adx_slope
     
     def calculate_adx(
         self,
@@ -895,20 +985,33 @@ class VolumeValueStrategy(Strategy):
             
             vwap = self.calculate_rolling_vwap(data, self.vwap_period_days, timeframe=detected_timeframe)
             
-            # Volume Profile del período anterior
-            vp_data = self.calculate_volume_profile(data, self.volume_profile_period)
+            # MEJORA: Volume Profile dinámico (usa dynamic_vp_period si es > 0)
+            vp_period_to_use = self.dynamic_vp_period if self.dynamic_vp_period > 0 else self.volume_profile_period
+            vp_data = self.calculate_volume_profile(data, vp_period_to_use)
             vpoc = vp_data['vpoc']
             vah = vp_data['vah']
             val = vp_data['val']
             lvn_levels = vp_data['lvn_levels']
             
-            # CVD
-            cvd = self.calculate_cvd(data)
+            # MEJORA: CVD normalizado o estándar según configuración
+            if self.use_normalized_cvd:
+                cvd = self.calculate_cvd_normalized(data, lookback=self.delta_lookback)
+                logger.debug(f"Usando CVD normalizado (valores entre -1 y +1)")
+            else:
+                cvd = self.calculate_cvd(data)
             
-            # ADX para filtro de regímenes de mercado (si está habilitado)
+            # MEJORA: ADX con pendiente si está habilitado
             adx = None
+            adx_slope = None
             if self.market_regime_enabled:
-                adx = self.calculate_adx(data['high'], data['low'], data['close'], self.adx_period)
+                if self.adx_slope_enabled:
+                    adx, adx_slope = self.calculate_adx_with_slope(
+                        data['high'], data['low'], data['close'], 
+                        self.adx_period, self.adx_slope_period
+                    )
+                    logger.debug(f"ADX con filtro de pendiente habilitado (período={self.adx_slope_period})")
+                else:
+                    adx = self.calculate_adx(data['high'], data['low'], data['close'], self.adx_period)
             
             # Inicializar señales
             signals = pd.Series(0, index=data.index, dtype=int)
@@ -935,7 +1038,7 @@ class VolumeValueStrategy(Strategy):
                     continue
                 
                 # 2.5. Filtro ADX de regímenes de mercado (si está habilitado)
-                # Usar thresholds diferenciados para LONG vs SHORT
+                # MEJORA: Verificar también pendiente del ADX si está habilitado
                 if self.market_regime_enabled and adx is not None:
                     if i >= len(adx) or pd.isna(adx.iloc[i]):
                         continue  # No hay ADX disponible aún
@@ -944,6 +1047,14 @@ class VolumeValueStrategy(Strategy):
                     if adx.iloc[i] < adx_threshold_to_use:
                         logger.debug(f"Vela {i}: ADX {adx.iloc[i]:.2f} < {adx_threshold_to_use}, mercado sin tendencia fuerte")
                         continue  # No hay tendencia fuerte, saltar señal
+                    
+                    # MEJORA: Verificar pendiente del ADX si está habilitado
+                    if self.adx_slope_enabled and adx_slope is not None:
+                        if i >= len(adx_slope) or pd.isna(adx_slope.iloc[i]):
+                            continue  # No hay pendiente disponible
+                        if adx_slope.iloc[i] <= 0:
+                            logger.debug(f"Vela {i}: ADX pendiente {adx_slope.iloc[i]:.4f} <= 0, tendencia debilitándose")
+                            continue  # Tendencia debilitándose, saltar señal
                 
                 # 3. Detectar divergencia de absorción PRIMERO (no requiere zona de valor)
                 price_series = close_prices.iloc[:i+1]
