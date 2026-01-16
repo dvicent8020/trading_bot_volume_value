@@ -1,0 +1,118 @@
+2026-01-15 10:18:16 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:16 - __main__ - INFO - PRUEBA BTC/USDT - CONFIGURACIÓN ESPECÍFICA
+2026-01-15 10:18:16 - __main__ - INFO - Timeframe: 1D | Período: 365 días
+2026-01-15 10:18:16 - __main__ - INFO - Configuración: 10x Leverage | Trailing Stop Distance 1% | ATR Multiplier 1.8
+2026-01-15 10:18:16 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:16 - __main__ - INFO - 
+================================================================================
+2026-01-15 10:18:16 - __main__ - INFO - PRUEBA VOLUME VALUE STRATEGY - BTC/USDT
+2026-01-15 10:18:16 - __main__ - INFO - Timeframe: 1d, Período: 365 días
+2026-01-15 10:18:16 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:16 - __main__ - INFO - 
+📊 CONFIGURACIÓN DE RIESGO PARA BTC/USDT:
+2026-01-15 10:18:16 - __main__ - INFO -   • Leverage: 10.0x
+2026-01-15 10:18:16 - __main__ - INFO -   • Trailing Stop Activation: 1.50%
+2026-01-15 10:18:16 - __main__ - INFO -   • Trailing Stop Distance: 1.00%
+2026-01-15 10:18:16 - __main__ - INFO -   • Hard Stop Loss: 4.00%
+2026-01-15 10:18:16 - __main__ - INFO -   • ATR Filter: Activado (Period=14, Multiplier=1.8)
+2026-01-15 10:18:16 - __main__ - INFO -   • ADX Market Regime Filter: Activado (Threshold=30.0)
+2026-01-15 10:18:16 - trading_bot.data_handler - INFO - DataHandler inicializado para BTC/USDT (futures)
+2026-01-15 10:18:16 - trading_bot.data_handler - INFO - Descargando 365 días de datos para BTC/USDT (1d)
+2026-01-15 10:18:20 - trading_bot.data_handler - INFO - Datos descargados exitosamente: 365 velas desde 2025-01-16 00:00:00 hasta 2026-01-15 00:00:00
+2026-01-15 10:18:20 - __main__ - INFO - 
+Datos: 365 velas
+2026-01-15 10:18:20 - __main__ - INFO - Precio inicial: $99,937.40
+2026-01-15 10:18:20 - __main__ - INFO - Precio final: $96,990.30
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - VolumeValueStrategy inicializada: VWAP=7d, VP=7d, Value Area=68.0%, Volatility Threshold=300.0%, ADX Filter=ON
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 96: SEÑAL LONG. Razón: CVD Momentum positivo: 780059, Zona: VALUE_AREA, Precio: 93404.90, VWAP: 87093.38
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 97: SEÑAL LONG. Razón: CVD Momentum positivo: 736349, Zona: VALUE_AREA, Precio: 93632.10, VWAP: 88838.19
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 98: SEÑAL LONG. Razón: CVD Momentum positivo: 677883, Zona: VALUE_AREA, Precio: 93931.60, VWAP: 89879.36
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 99: SEÑAL LONG. Razón: CVD Momentum positivo: 738882, Zona: VALUE_AREA, Precio: 94591.80, VWAP: 90733.14
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 100: SEÑAL LONG. Razón: CVD Momentum positivo: 953376, Zona: VALUE_AREA, Precio: 94575.70, VWAP: 91247.88
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 101: SEÑAL LONG. Razón: CVD Momentum positivo: 833724, Zona: VALUE_AREA, Precio: 93697.10, VWAP: 91866.10
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 102: SEÑAL LONG. Razón: CVD Momentum positivo: 1121141, Zona: VALUE_AREA, Precio: 94969.00, VWAP: 93311.75
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 103: SEÑAL LONG. Razón: CVD Momentum positivo: 663241, Zona: VALUE_AREA, Precio: 94200.10, VWAP: 94018.94
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 105: SEÑAL LONG. Razón: CVD Momentum positivo: 782912, Zona: VAH, Precio: 96423.30, VWAP: 94614.87
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 106: SEÑAL LONG. Razón: CVD Momentum positivo: 724883, Zona: VAH, Precio: 96831.20, VWAP: 94992.93
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 107: SEÑAL LONG. Razón: CVD Momentum positivo: 763568, Zona: VALUE_AREA, Precio: 95803.30, VWAP: 95108.78
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 110: SEÑAL LONG. Razón: CVD Momentum positivo: 784215, Zona: VAH, Precio: 96798.90, VWAP: 95395.05
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 111: SEÑAL LONG. Razón: CVD Momentum positivo: 727031, Zona: VAH, Precio: 96988.40, VWAP: 95883.53
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 302: SEÑAL SHORT. Razón: CVD Momentum negativo: -682911, Zona: VALUE_AREA, Precio: 94544.90, VWAP: 101051.05
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 303: SEÑAL SHORT. Razón: CVD Momentum negativo: -708167, Zona: VALUE_AREA, Precio: 95560.30, VWAP: 100522.73
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 304: SEÑAL SHORT. Razón: CVD Momentum negativo: -737704, Zona: VALUE_AREA, Precio: 94221.70, VWAP: 99551.97
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 305: SEÑAL SHORT. Razón: CVD Momentum negativo: -785294, Zona: VALUE_AREA, Precio: 92169.70, VWAP: 97886.77
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 306: SEÑAL SHORT. Razón: CVD Momentum negativo: -646751, Zona: VALUE_AREA, Precio: 92916.90, VWAP: 96199.49
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 307: SEÑAL SHORT. Razón: CVD Momentum negativo: -653488, Zona: VALUE_AREA, Precio: 91508.90, VWAP: 94735.67
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 351: SEÑAL LONG. Razón: CVD Momentum positivo: 28628, Zona: VPOC, Precio: 89951.40, VWAP: 88506.76
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 352: SEÑAL LONG. Razón: CVD Momentum positivo: 118818, Zona: VPOC, Precio: 90595.80, VWAP: 88669.06
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 353: SEÑAL LONG. Razón: CVD Momentum positivo: 243511, Zona: VALUE_AREA, Precio: 91497.10, VWAP: 88962.85
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 354: SEÑAL LONG. Razón: CVD Momentum positivo: 307625, Zona: VALUE_AREA, Precio: 93822.40, VWAP: 90255.75
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 355: SEÑAL LONG. Razón: CVD Momentum positivo: 367387, Zona: VALUE_AREA, Precio: 93708.00, VWAP: 91215.76
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 362: SEÑAL LONG. Razón: CVD Momentum positivo: 339271, Zona: VALUE_AREA, Precio: 95375.20, VWAP: 91835.64
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 363: SEÑAL LONG. Razón: CVD Momentum positivo: 433754, Zona: VAH, Precio: 96907.90, VWAP: 92724.33
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - Vela 364: SEÑAL LONG. Razón: CVD Momentum positivo: 430415, Zona: VAH, Precio: 96990.30, VWAP: 93440.60
+2026-01-15 10:18:20 - trading_bot.volume_value_strategy - INFO - VolumeValueStrategy: 27 señales generadas
+2026-01-15 10:18:20 - __main__ - INFO - 
+Señales generadas: 21 LONG, 6 SHORT (Total: 27)
+2026-01-15 10:18:20 - trading_bot.backtester - INFO - Backtester inicializado: capital=5000.0, commission=0.001, SL=4.0%, TP=8.0%, market=futures, leverage=10.0x
+2026-01-15 10:18:20 - trading_bot.backtester - INFO - Iniciando backtest sobre 365 períodos
+2026-01-15 10:18:20 - trading_bot.backtester - INFO - ✅ No se detectaron liquidaciones durante el backtest
+2026-01-15 10:18:20 - trading_bot.backtester - INFO - Backtest completado exitosamente
+2026-01-15 10:18:20 - trading_bot.backtester - INFO - Métricas calculadas: Retorno=428.13%, Sharpe=1.96, MaxDD=-100.00%
+2026-01-15 10:18:20 - __main__ - INFO - 
+================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - RESULTADOS:
+2026-01-15 10:18:20 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:20 - __main__ - INFO -   • Señales: 27 (21 LONG, 6 SHORT)
+2026-01-15 10:18:20 - __main__ - INFO -   • Operaciones: 27
+2026-01-15 10:18:20 - __main__ - INFO -   • Win Rate: 100.00%
+2026-01-15 10:18:20 - __main__ - INFO -   • Retorno Total: 428.13%
+2026-01-15 10:18:20 - __main__ - INFO -   • Sharpe Ratio: 1.96
+2026-01-15 10:18:20 - __main__ - INFO -   • Maximum Drawdown: -100.00%
+2026-01-15 10:18:20 - __main__ - INFO -   • Capital Final: $26,406.51
+2026-01-15 10:18:20 - __main__ - INFO -   • Ganancia Total: $21,406.51
+2026-01-15 10:18:20 - __main__ - INFO -   • Ganancia Semanal: $410.54
+2026-01-15 10:18:20 - __main__ - INFO -   • Porcentaje Semanal: 8.21%
+2026-01-15 10:18:20 - __main__ - INFO - 
+  Objetivos:
+2026-01-15 10:18:20 - __main__ - INFO -     • Mínimo: 5%/semana = $250/semana
+2026-01-15 10:18:20 - __main__ - INFO -     • Ideal: 8%/semana = $400/semana
+2026-01-15 10:18:20 - __main__ - INFO - 
+  ✅✅ CUMPLE OBJETIVO IDEAL (8% semanal)
+2026-01-15 10:18:20 - __main__ - ERROR - 
+  ❌ LIQUIDACIÓN DETECTADA
+2026-01-15 10:18:20 - __main__ - INFO - 
+
+================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - RESUMEN COMPARATIVO - VOLUME VALUE STRATEGY
+2026-01-15 10:18:20 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - 
+Par          Señales    Ops    Win Rate   Retorno %    Sharpe   Drawdown %   %/Semana     Liquidación 
+2026-01-15 10:18:20 - __main__ - INFO - --------------------------------------------------------------------------------------------------------------
+2026-01-15 10:18:20 - __main__ - INFO - BTC/USDT     27         27     100.00%    428.13%      1.96     -100.00%     8.21%        Sí          
+2026-01-15 10:18:20 - __main__ - INFO - 
+================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - ANÁLISIS:
+2026-01-15 10:18:20 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - 
+  • Mejor Retorno: BTC/USDT (428.13%)
+2026-01-15 10:18:20 - __main__ - INFO -   • Mejor Sharpe: BTC/USDT (1.96)
+2026-01-15 10:18:20 - __main__ - INFO -   • Menor Drawdown: BTC/USDT (-100.00%)
+2026-01-15 10:18:20 - __main__ - INFO - 
+  📊 ANÁLISIS DE DRAWDOWN (Objetivo: < 20.0%):
+2026-01-15 10:18:20 - __main__ - WARNING -      ❌ Ningún par cumple objetivo de Drawdown < 20.0%
+2026-01-15 10:18:20 - __main__ - WARNING - 
+  ⚠️ Liquidaciones detectadas: 1 de 1 pares
+2026-01-15 10:18:20 - __main__ - INFO -      Considerar reducir leverage o ajustar parámetros
+2026-01-15 10:18:20 - __main__ - INFO - 
+  • Objetivos cumplidos (≥5%/semana): 1/1 pares
+2026-01-15 10:18:20 - __main__ - INFO - 
+================================================================================
+2026-01-15 10:18:20 - __main__ - INFO - CONFIGURACIÓN DE RIESGO APLICADA:
+2026-01-15 10:18:20 - __main__ - INFO - ================================================================================
+2026-01-15 10:18:20 - __main__ - INFO -   BTC/USDT:
+2026-01-15 10:18:20 - __main__ - INFO -     • Leverage: 5x | Trailing Stop: 3%/1.5% | Hard Stop: 6%
+2026-01-15 10:18:20 - __main__ - INFO -     • ATR Filter: ON (14, 1.8x) | ADX Filter: ON (Threshold: 30.0)
+2026-01-15 10:18:20 - __main__ - INFO -   Altcoins (ETH, SOL, XRP):
+2026-01-15 10:18:20 - __main__ - INFO -     • Leverage: 3x | Trailing Stop: 2.0%/1.2% | Hard Stop: 5%
+2026-01-15 10:18:20 - __main__ - INFO -     • ATR Filter: ON (14, 1.8x) | ADX Filter: ON (Threshold: 30.0)

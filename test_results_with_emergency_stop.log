@@ -1,0 +1,57 @@
+2026-01-15 08:33:35 - __main__ - INFO - ================================================================================
+2026-01-15 08:33:35 - __main__ - INFO - PRUEBAS VOLUME VALUE STRATEGY
+2026-01-15 08:33:35 - __main__ - INFO - Timeframe: 1d | Período: 90 días
+2026-01-15 08:33:35 - __main__ - INFO - Configuración: Conservadora BTC/USDT optimizada
+2026-01-15 08:33:35 - __main__ - INFO - ================================================================================
+2026-01-15 08:33:35 - __main__ - INFO - 
+================================================================================
+2026-01-15 08:33:35 - __main__ - INFO - PRUEBA VOLUME VALUE STRATEGY - BTC/USDT
+2026-01-15 08:33:35 - __main__ - INFO - Timeframe: 1d, Período: 90 días
+2026-01-15 08:33:35 - __main__ - INFO - ================================================================================
+2026-01-15 08:33:35 - __main__ - INFO - 
+📊 CONFIGURACIÓN DE RIESGO PARA BTC/USDT:
+2026-01-15 08:33:35 - __main__ - INFO -   • Leverage: 10.0x
+2026-01-15 08:33:35 - __main__ - INFO -   • Trailing Stop Activation: 5.00%
+2026-01-15 08:33:35 - __main__ - INFO -   • Trailing Stop Distance: 2.00%
+2026-01-15 08:33:35 - __main__ - INFO -   • Hard Stop Loss: None (solo ATR dinámico)
+2026-01-15 08:33:35 - __main__ - INFO -   • ATR Filter: Activado (Period=14, Multiplier=1.8)
+2026-01-15 08:33:35 - __main__ - INFO -   • ADX Market Regime Filter: Activado (Threshold=30.0)
+2026-01-15 08:33:35 - trading_bot.data_handler - INFO - DataHandler inicializado para BTC/USDT (futures)
+2026-01-15 08:33:35 - trading_bot.data_handler - INFO - Descargando 90 días de datos para BTC/USDT (1d)
+2026-01-15 08:33:39 - trading_bot.data_handler - INFO - Datos descargados exitosamente: 90 velas desde 2025-10-18 00:00:00 hasta 2026-01-15 00:00:00
+2026-01-15 08:33:39 - __main__ - INFO - 
+Datos: 90 velas
+2026-01-15 08:33:39 - __main__ - INFO - Precio inicial: $107,117.50
+2026-01-15 08:33:39 - __main__ - INFO - Precio final: $96,580.80
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - VolumeValueStrategy inicializada: VWAP=7d, VP=7d, Value Area=68.0%, Volatility Threshold=300.0%, ADX Filter=ON
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 76: SEÑAL LONG. Razón: CVD Momentum positivo: 28628, Zona: VPOC, Precio: 89951.40, VWAP: 88506.76
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 77: SEÑAL LONG. Razón: CVD Momentum positivo: 118818, Zona: VPOC, Precio: 90595.80, VWAP: 88669.06
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 78: SEÑAL LONG. Razón: CVD Momentum positivo: 243511, Zona: VALUE_AREA, Precio: 91497.10, VWAP: 88962.85
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 79: SEÑAL LONG. Razón: CVD Momentum positivo: 307625, Zona: VALUE_AREA, Precio: 93822.40, VWAP: 90255.75
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 80: SEÑAL LONG. Razón: CVD Momentum positivo: 367387, Zona: VALUE_AREA, Precio: 93708.00, VWAP: 91215.76
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 87: SEÑAL LONG. Razón: CVD Momentum positivo: 339271, Zona: VALUE_AREA, Precio: 95375.20, VWAP: 91835.64
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 88: SEÑAL LONG. Razón: CVD Momentum positivo: 433754, Zona: VAH, Precio: 96907.90, VWAP: 92724.33
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - Vela 89: SEÑAL LONG. Razón: CVD Momentum positivo: 414262, Zona: VAH, Precio: 96580.80, VWAP: 93403.88
+2026-01-15 08:33:39 - trading_bot.volume_value_strategy - INFO - VolumeValueStrategy: 8 señales generadas
+2026-01-15 08:33:39 - __main__ - INFO - 
+Señales generadas: 8 LONG, 0 SHORT (Total: 8)
+2026-01-15 08:33:39 - trading_bot.backtester - INFO - Hard stop de emergencia activado automáticamente: 9.0% (para prevenir liquidaciones con 10.0x leverage)
+2026-01-15 08:33:39 - trading_bot.backtester - INFO - Backtester inicializado: capital=5000.0, commission=0.001, SL=ATR(14x1.8)+Emerg(9.0%), TP=8.0%, market=futures, leverage=10.0x
+2026-01-15 08:33:39 - trading_bot.backtester - INFO - Iniciando backtest sobre 90 períodos
+2026-01-15 08:33:40 - trading_bot.backtester - ERROR - Error inesperado al ejecutar backtest: Invalid format specifier '.2f if atr_stop else None' for object of type 'float'
+2026-01-15 08:33:40 - __main__ - ERROR - Error ejecutando prueba para BTC/USDT: Error al ejecutar backtest: Invalid format specifier '.2f if atr_stop else None' for object of type 'float'
+Traceback (most recent call last):
+  File "/home/daniel/projects/trading_test/trading_bot/backtester.py", line 508, in run_backtest
+    logger.debug(f"LONG: ATR={atr_stop:.2f if atr_stop else None}, Hard={hard_stop:.2f if hard_stop else None}, Emerg={emergency_stop:.2f if emergency_stop else None}, Usando={stop_loss_price:.2f}")
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Invalid format specifier '.2f if atr_stop else None' for object of type 'float'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/daniel/projects/trading_test/test_volume_value_strategy.py", line 132, in run_test
+    results = backtester.run_backtest(data, signals)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/daniel/projects/trading_test/trading_bot/backtester.py", line 805, in run_backtest
+    raise BacktesterError(f"Error al ejecutar backtest: {e}")
+trading_bot.exceptions.BacktesterError: Error al ejecutar backtest: Invalid format specifier '.2f if atr_stop else None' for object of type 'float'
