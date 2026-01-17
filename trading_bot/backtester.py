@@ -1852,43 +1852,63 @@ class Backtester:
                 )
                 db_session.add(trade)
             
-            # Guardar señales
-            # Para señales, necesitamos mapear 1->BUY, -1->SELL, 0->HOLD
+            # Guardar señales (solo BUY y SELL, no HOLD)
+            # Obtener detalles de señales si la estrategia los proporciona
+            signal_details = {}
+            if strategy_config and hasattr(strategy_config, 'get_signal_details'):
+                details_list = strategy_config.get_signal_details()
+                # Crear mapa por timestamp para acceso rápido
+                for detail in details_list:
+                    ts = detail.get('timestamp')
+                    if ts:
+                        signal_details[str(ts)] = detail
+            
             for timestamp, signal_value in signals.items():
+                # Solo guardar BUY y SELL (no HOLD)
+                if signal_value == 0:
+                    continue
+                    
                 # Convertir timestamp a datetime
                 if isinstance(timestamp, pd.Timestamp):
                     signal_timestamp = timestamp.to_pydatetime()
                 else:
                     signal_timestamp = pd.to_datetime(timestamp).to_pydatetime()
+                
                 if signal_value == 1:
                     signal_type = SignalType.BUY
-                elif signal_value == -1:
-                    signal_type = SignalType.SELL
                 else:
-                    signal_type = SignalType.HOLD
+                    signal_type = SignalType.SELL
                 
                 price = results.loc[timestamp, 'close'] if timestamp in results.index else data.loc[timestamp, 'close']
                 
-                # Si tenemos acceso a la estrategia, obtener valores de indicadores
-                rsi_value = None
-                ma_fast = None
-                ma_slow = None
-                trend_sma = None
+                # Buscar detalles de la señal
+                detail = signal_details.get(str(timestamp), {})
                 
-                # Verificar si la señal resultó en una operación (marcar executed)
-                # Por simplicidad, marcamos BUY/SELL como executed, HOLD como no
-                executed = signal_value != 0
+                # Campos de calidad de señal (nuevos 2026-01-16)
+                signal_strength = detail.get('signal_strength')
+                value_zone = detail.get('zone')
+                signal_reason = detail.get('reason')
+                is_absorption = detail.get('is_absorption')
+                cvd_momentum = detail.get('cvd_momentum')
+                vwap_value = detail.get('vwap')
                 
                 signal = Signal(
                     backtest_run_id=backtest_run_id,
                     timestamp=signal_timestamp,
                     signal_type=signal_type,
                     price=float(price),
-                    rsi_value=rsi_value,
-                    ma_fast=ma_fast,
-                    ma_slow=ma_slow,
-                    trend_sma=trend_sma,
-                    executed=executed
+                    rsi_value=None,
+                    ma_fast=None,
+                    ma_slow=None,
+                    trend_sma=None,
+                    # Nuevos campos de calidad
+                    signal_strength=float(signal_strength) if signal_strength is not None else None,
+                    value_zone=str(value_zone) if value_zone else None,
+                    signal_reason=str(signal_reason)[:255] if signal_reason else None,
+                    is_absorption=bool(is_absorption) if is_absorption is not None else None,
+                    cvd_momentum=float(cvd_momentum) if cvd_momentum is not None else None,
+                    vwap_value=float(vwap_value) if vwap_value is not None else None,
+                    executed=True  # Solo guardamos señales ejecutadas
                 )
                 db_session.add(signal)
             

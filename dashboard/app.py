@@ -914,7 +914,7 @@ def render_trades_tab(tab, selected_backtest_id):
     [Input("main-tabs", "value"), Input("selected-backtest-store", "data")]
 )
 def render_signals_tab(tab, selected_backtest_id):
-    """Renderizar contenido de la pestaña de señales."""
+    """Renderizar contenido de la pestaña de señales con información de calidad."""
     if tab != "signals-tab" or not selected_backtest_id:
         return dbc.Alert("Por favor selecciona un backtest desde la pestaña 'Backtests'", color="info")
     
@@ -929,20 +929,160 @@ def render_signals_tab(tab, selected_backtest_id):
         return dbc.Alert("No hay señales para este backtest.", color="info")
     
     df = pd.DataFrame(signals)
+    
+    # Gráfico de señales con VWAP si está disponible
     signal_fig = go.Figure()
-    signal_fig.add_trace(go.Scatter(x=df["timestamp"], y=df["price"], mode='lines', name='Precio', line=dict(color='blue', width=1)))
+    signal_fig.add_trace(go.Scatter(
+        x=df["timestamp"], y=df["price"], 
+        mode='lines', name='Precio', 
+        line=dict(color='blue', width=1)
+    ))
+    
+    # Añadir VWAP si está disponible
+    if "vwap_value" in df.columns and df["vwap_value"].notna().any():
+        signal_fig.add_trace(go.Scatter(
+            x=df["timestamp"], y=df["vwap_value"], 
+            mode='lines', name='VWAP', 
+            line=dict(color='orange', width=1, dash='dash')
+        ))
     
     buy_signals = df[df["signal_type"] == "BUY"]
     if not buy_signals.empty:
-        signal_fig.add_trace(go.Scatter(x=buy_signals["timestamp"], y=buy_signals["price"], mode='markers', name='Compra', marker=dict(color='green', size=10, symbol='triangle-up')))
+        # Tamaño del marcador basado en signal_strength si está disponible
+        sizes = buy_signals.get("signal_strength", pd.Series([0.5] * len(buy_signals)))
+        sizes = (sizes.fillna(0.5) * 15 + 8).tolist()  # Escalar de 8 a 23
+        
+        signal_fig.add_trace(go.Scatter(
+            x=buy_signals["timestamp"], y=buy_signals["price"], 
+            mode='markers', name='Compra (LONG)', 
+            marker=dict(color='green', size=sizes, symbol='triangle-up'),
+            text=buy_signals.get("signal_reason", ""),
+            hovertemplate="<b>LONG</b><br>Precio: %{y:.2f}<br>%{text}<extra></extra>"
+        ))
     
     sell_signals = df[df["signal_type"] == "SELL"]
     if not sell_signals.empty:
-        signal_fig.add_trace(go.Scatter(x=sell_signals["timestamp"], y=sell_signals["price"], mode='markers', name='Venta', marker=dict(color='red', size=10, symbol='triangle-down')))
+        sizes = sell_signals.get("signal_strength", pd.Series([0.5] * len(sell_signals)))
+        sizes = (sizes.fillna(0.5) * 15 + 8).tolist()
+        
+        signal_fig.add_trace(go.Scatter(
+            x=sell_signals["timestamp"], y=sell_signals["price"], 
+            mode='markers', name='Venta (SHORT)', 
+            marker=dict(color='red', size=sizes, symbol='triangle-down'),
+            text=sell_signals.get("signal_reason", ""),
+            hovertemplate="<b>SHORT</b><br>Precio: %{y:.2f}<br>%{text}<extra></extra>"
+        ))
     
-    signal_fig.update_layout(title="Señales de Trading", xaxis_title="Fecha", yaxis_title="Precio", height=600)
+    signal_fig.update_layout(
+        title="Señales de Trading (tamaño = calidad de señal)", 
+        xaxis_title="Fecha", yaxis_title="Precio", height=500
+    )
     
-    return dbc.Container([html.H3("Señales Generadas"), dcc.Graph(figure=signal_fig)], fluid=True)
+    # Tabla de señales con detalles
+    # Filtrar solo señales BUY y SELL
+    df_filtered = df[df["signal_type"].isin(["BUY", "SELL"])].copy()
+    
+    if df_filtered.empty:
+        signals_table = dbc.Alert("No hay señales BUY/SELL en este backtest.", color="warning")
+    else:
+        # Preparar datos para la tabla
+        def format_strength(val):
+            if pd.isna(val) or val is None:
+                return "N/A"
+            return f"{float(val)*100:.0f}%"
+        
+        def get_strength_color(val):
+            if pd.isna(val) or val is None:
+                return "secondary"
+            val = float(val)
+            if val >= 0.7:
+                return "success"
+            elif val >= 0.5:
+                return "warning"
+            else:
+                return "danger"
+        
+        table_rows = []
+        for _, row in df_filtered.iterrows():
+            signal_type = row.get("signal_type", "")
+            strength = row.get("signal_strength")
+            zone = row.get("value_zone", "N/A")
+            reason = row.get("signal_reason", "N/A")
+            is_absorption = row.get("is_absorption", False)
+            
+            # Badge de tipo de señal
+            type_badge = dbc.Badge(
+                signal_type, 
+                color="success" if signal_type == "BUY" else "danger",
+                className="me-2"
+            )
+            
+            # Badge de calidad
+            strength_badge = dbc.Badge(
+                format_strength(strength),
+                color=get_strength_color(strength),
+                className="me-2"
+            )
+            
+            # Badge de absorción
+            absorption_badge = dbc.Badge(
+                "Absorción", color="info", className="me-2"
+            ) if is_absorption else ""
+            
+            table_rows.append(html.Tr([
+                html.Td(row.get("timestamp", "")[:19] if row.get("timestamp") else ""),
+                html.Td(type_badge),
+                html.Td(f"${row.get('price', 0):,.2f}"),
+                html.Td([strength_badge]),
+                html.Td(zone if zone else "N/A"),
+                html.Td([absorption_badge, reason[:50] if reason else "N/A"]),
+            ]))
+        
+        signals_table = dbc.Table([
+            html.Thead(html.Tr([
+                html.Th("Timestamp"),
+                html.Th("Tipo"),
+                html.Th("Precio"),
+                html.Th("Calidad"),
+                html.Th("Zona"),
+                html.Th("Razón"),
+            ])),
+            html.Tbody(table_rows[:50])  # Limitar a 50 filas
+        ], bordered=True, striped=True, hover=True, responsive=True, size="sm")
+    
+    # Estadísticas de calidad de señales
+    stats_cards = []
+    if "signal_strength" in df_filtered.columns and df_filtered["signal_strength"].notna().any():
+        avg_strength = df_filtered["signal_strength"].mean()
+        high_quality = (df_filtered["signal_strength"] >= 0.7).sum()
+        absorption_count = df_filtered.get("is_absorption", pd.Series([False])).sum()
+        
+        stats_cards = dbc.Row([
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H5("Calidad Promedio"),
+                html.H3(f"{avg_strength*100:.1f}%", className="text-info")
+            ])])], md=3),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H5("Señales Alta Calidad"),
+                html.H3(f"{high_quality}/{len(df_filtered)}", className="text-success")
+            ])])], md=3),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H5("Señales Absorción"),
+                html.H3(f"{absorption_count}", className="text-warning")
+            ])])], md=3),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H5("Total Señales"),
+                html.H3(f"{len(df_filtered)}", className="text-primary")
+            ])])], md=3),
+        ], className="mb-4")
+    
+    return dbc.Container([
+        html.H3("Señales Generadas"),
+        stats_cards,
+        dcc.Graph(figure=signal_fig),
+        html.H4("Detalle de Señales", className="mt-4"),
+        signals_table
+    ], fluid=True)
 
 
 @app.callback(

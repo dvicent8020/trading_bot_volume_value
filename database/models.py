@@ -221,6 +221,13 @@ class Signal(Base):
     vpoc_level = Column(Float, nullable=True)
     delta_divergence_detected = Column(Boolean, nullable=True)
     
+    # Nuevos campos de calidad de señal (2026-01-16)
+    signal_strength = Column(Float, nullable=True)  # Score 0.0-1.0
+    value_zone = Column(String(20), nullable=True)  # VPOC, VAH, VAL, VALUE_AREA, EXTREMO
+    signal_reason = Column(String(255), nullable=True)  # Razón de la señal
+    is_absorption = Column(Boolean, nullable=True)  # Si es señal de absorción
+    cvd_momentum = Column(Float, nullable=True)  # Momentum del CVD
+    
     executed = Column(Boolean, default=False, nullable=False)  # Si la señal resultó en una operación
     
     # Relación

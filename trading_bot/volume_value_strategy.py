@@ -950,6 +950,9 @@ class VolumeValueStrategy(Strategy):
             Series con señales: 1 (compra), -1 (venta), 0 (mantener).
         """
         try:
+            # Inicializar lista de detalles de señales
+            self.signal_details = []
+            
             self.validate_data(data)
             
             # Validar columnas requeridas
@@ -1130,9 +1133,30 @@ class VolumeValueStrategy(Strategy):
                     signals.iloc[i] = 1
                     last_signal_index = i
                     zone_str = zone if zone else 'EXTREMO'
+                    
+                    # Calcular signal_strength
+                    signal_strength = self.calculate_signal_strength(
+                        data, i, 'LONG', cvd_momentum, current_price, current_vwap, zone_str
+                    )
+                    
+                    # Almacenar detalles de la señal
+                    self.signal_details.append({
+                        'index': i,
+                        'timestamp': data.index[i] if hasattr(data.index[i], 'isoformat') else str(data.index[i]),
+                        'signal_type': 'LONG',
+                        'price': current_price,
+                        'vwap': current_vwap,
+                        'zone': zone_str,
+                        'reason': reason,
+                        'signal_strength': signal_strength,
+                        'is_absorption': is_absorption,
+                        'cvd_momentum': cvd_momentum
+                    })
+                    
                     logger.info(
                         f"Vela {i}: SEÑAL LONG. Razón: {reason}, "
-                        f"Zona: {zone_str}, Precio: {current_price:.2f}, VWAP: {current_vwap:.2f}"
+                        f"Zona: {zone_str}, Precio: {current_price:.2f}, VWAP: {current_vwap:.2f}, "
+                        f"Strength: {signal_strength:.2f}"
                     )
                 
                 # Generar señal SHORT
@@ -1151,9 +1175,30 @@ class VolumeValueStrategy(Strategy):
                     signals.iloc[i] = -1
                     last_signal_index = i
                     zone_str = zone if zone else 'EXTREMO'
+                    
+                    # Calcular signal_strength
+                    signal_strength = self.calculate_signal_strength(
+                        data, i, 'SHORT', cvd_momentum, current_price, current_vwap, zone_str
+                    )
+                    
+                    # Almacenar detalles de la señal
+                    self.signal_details.append({
+                        'index': i,
+                        'timestamp': data.index[i] if hasattr(data.index[i], 'isoformat') else str(data.index[i]),
+                        'signal_type': 'SHORT',
+                        'price': current_price,
+                        'vwap': current_vwap,
+                        'zone': zone_str,
+                        'reason': reason,
+                        'signal_strength': signal_strength,
+                        'is_absorption': is_absorption,
+                        'cvd_momentum': cvd_momentum
+                    })
+                    
                     logger.info(
                         f"Vela {i}: SEÑAL SHORT. Razón: {reason}, "
-                        f"Zona: {zone_str}, Precio: {current_price:.2f}, VWAP: {current_vwap:.2f}"
+                        f"Zona: {zone_str}, Precio: {current_price:.2f}, VWAP: {current_vwap:.2f}, "
+                        f"Strength: {signal_strength:.2f}"
                     )
             
             total_signals = (signals != 0).sum()
@@ -1180,6 +1225,24 @@ class VolumeValueStrategy(Strategy):
             'adx_period': self.adx_period,
             'adx_threshold': self.adx_threshold
         }
+    
+    def get_signal_details(self) -> List[Dict[str, Any]]:
+        """
+        Retorna los detalles de todas las señales generadas.
+        
+        Returns:
+            Lista de diccionarios con detalles de cada señal:
+            - timestamp: Timestamp de la señal
+            - signal_type: 'LONG' o 'SHORT'
+            - price: Precio al momento de la señal
+            - vwap: VWAP al momento de la señal
+            - zone: Zona de valor (VPOC, VAH, VAL, VALUE_AREA, EXTREMO)
+            - reason: Razón de la señal
+            - signal_strength: Score de calidad (0.0-1.0)
+            - is_absorption: Si es señal de absorción
+            - cvd_momentum: Momentum del CVD
+        """
+        return getattr(self, 'signal_details', [])
     
     def get_lvn_stop_loss(
         self,

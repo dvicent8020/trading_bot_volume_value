@@ -189,6 +189,12 @@ class SignalSchema(BaseModel):
     vwap_value: Optional[float] = None
     vpoc_level: Optional[float] = None
     delta_divergence_detected: Optional[bool] = None
+    # Nuevos campos de calidad de señal (2026-01-16)
+    signal_strength: Optional[float] = None  # Score 0.0-1.0
+    value_zone: Optional[str] = None  # VPOC, VAH, VAL, VALUE_AREA, EXTREMO
+    signal_reason: Optional[str] = None  # Razón de la señal
+    is_absorption: Optional[bool] = None  # Si es señal de absorción
+    cvd_momentum: Optional[float] = None  # Momentum del CVD
     executed: bool
     
     class Config:
