@@ -914,78 +914,296 @@ def render_trades_tab(tab, selected_backtest_id):
     [Input("main-tabs", "value"), Input("selected-backtest-store", "data")]
 )
 def render_signals_tab(tab, selected_backtest_id):
-    """Renderizar contenido de la pestaña de señales con información de calidad."""
+    """Renderizar contenido de la pestaña de señales con filtros interactivos."""
     if tab != "signals-tab" or not selected_backtest_id:
         return dbc.Alert("Por favor selecciona un backtest desde la pestaña 'Backtests'", color="info")
     
+    # Layout con filtros y contenedores para gráfico/tabla
+    return dbc.Container([
+        html.H3("Señales Generadas"),
+        
+        # Filtros
+        dbc.Card([
+            dbc.CardBody([
+                html.H5("Filtros", className="mb-3"),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label("Tipo de Señal"),
+                        dcc.Dropdown(
+                            id="signal-type-filter",
+                            options=[
+                                {"label": "Todas", "value": "ALL"},
+                                {"label": "🟢 BUY (LONG)", "value": "BUY"},
+                                {"label": "🔴 SELL (SHORT)", "value": "SELL"},
+                            ],
+                            value="ALL",
+                            clearable=False
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        dbc.Label("Calidad de Señal"),
+                        dcc.Dropdown(
+                            id="signal-quality-filter",
+                            options=[
+                                {"label": "Todas", "value": "ALL"},
+                                {"label": "🟢 Alta (≥70%)", "value": "HIGH"},
+                                {"label": "🟡 Media (50-70%)", "value": "MEDIUM"},
+                                {"label": "🔴 Baja (<50%)", "value": "LOW"},
+                                {"label": "🟢🟡 Alta + Media (≥50%)", "value": "HIGH_MEDIUM"},
+                            ],
+                            value="ALL",
+                            clearable=False
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        dbc.Label("Tipo de Señal (Absorción)"),
+                        dcc.Dropdown(
+                            id="signal-absorption-filter",
+                            options=[
+                                {"label": "Todas", "value": "ALL"},
+                                {"label": "✨ Solo Absorción", "value": "ABSORPTION"},
+                                {"label": "📈 Solo Momentum", "value": "MOMENTUM"},
+                            ],
+                            value="ALL",
+                            clearable=False
+                        )
+                    ], md=3),
+                    dbc.Col([
+                        dbc.Label("Mostrar"),
+                        dbc.Checklist(
+                            id="signal-display-options",
+                            options=[
+                                {"label": "VWAP", "value": "show_vwap"},
+                            ],
+                            value=["show_vwap"],
+                            inline=True
+                        )
+                    ], md=3),
+                ]),
+            ])
+        ], className="mb-4"),
+        
+        # Estadísticas (se actualizarán dinámicamente)
+        html.Div(id="signals-stats-container"),
+        
+        # Gráfico
+        dcc.Graph(id="signals-chart"),
+        
+        # Tabla
+        html.H4("Detalle de Señales", className="mt-4"),
+        html.Div(id="signals-table-container"),
+        
+        # Store para datos de señales
+        dcc.Store(id="signals-data-store", data={"backtest_id": selected_backtest_id})
+    ], fluid=True)
+
+
+@app.callback(
+    [
+        Output("signals-stats-container", "children"),
+        Output("signals-chart", "figure"),
+        Output("signals-table-container", "children")
+    ],
+    [
+        Input("signals-data-store", "data"),
+        Input("signal-type-filter", "value"),
+        Input("signal-quality-filter", "value"),
+        Input("signal-absorption-filter", "value"),
+        Input("signal-display-options", "value")
+    ]
+)
+def update_signals_display(store_data, type_filter, quality_filter, absorption_filter, display_options):
+    """Actualizar gráfico y tabla según los filtros seleccionados."""
+    if not store_data or not store_data.get("backtest_id"):
+        empty_fig = go.Figure()
+        empty_fig.update_layout(title="Sin datos")
+        return [], empty_fig, dbc.Alert("Cargando...", color="info")
+    
+    backtest_id = store_data["backtest_id"]
+    
     try:
-        response = requests.get(f"{API_URL}/api/signals/?backtest_id={selected_backtest_id}&limit=1000")
+        response = requests.get(f"{API_URL}/api/signals/?backtest_id={backtest_id}&limit=1000")
         response.raise_for_status()
         signals = response.json()
     except Exception as e:
-        return dbc.Alert(f"Error cargando señales: {str(e)}", color="danger")
+        empty_fig = go.Figure()
+        return [], empty_fig, dbc.Alert(f"Error: {str(e)}", color="danger")
     
     if not signals:
-        return dbc.Alert("No hay señales para este backtest.", color="info")
+        empty_fig = go.Figure()
+        return [], empty_fig, dbc.Alert("No hay señales.", color="info")
     
     df = pd.DataFrame(signals)
     
-    # Gráfico de señales con VWAP si está disponible
+    # Filtrar solo BUY y SELL
+    df = df[df["signal_type"].isin(["BUY", "SELL"])].copy()
+    
+    if df.empty:
+        empty_fig = go.Figure()
+        return [], empty_fig, dbc.Alert("No hay señales BUY/SELL.", color="warning")
+    
+    # Aplicar filtros
+    df_filtered = df.copy()
+    
+    # Filtro por tipo
+    if type_filter and type_filter != "ALL":
+        df_filtered = df_filtered[df_filtered["signal_type"] == type_filter]
+    
+    # Filtro por calidad
+    if quality_filter and quality_filter != "ALL":
+        if "signal_strength" in df_filtered.columns:
+            if quality_filter == "HIGH":
+                df_filtered = df_filtered[df_filtered["signal_strength"] >= 0.7]
+            elif quality_filter == "MEDIUM":
+                df_filtered = df_filtered[(df_filtered["signal_strength"] >= 0.5) & (df_filtered["signal_strength"] < 0.7)]
+            elif quality_filter == "LOW":
+                df_filtered = df_filtered[df_filtered["signal_strength"] < 0.5]
+            elif quality_filter == "HIGH_MEDIUM":
+                df_filtered = df_filtered[df_filtered["signal_strength"] >= 0.5]
+    
+    # Filtro por absorción
+    if absorption_filter and absorption_filter != "ALL":
+        if "is_absorption" in df_filtered.columns:
+            if absorption_filter == "ABSORPTION":
+                df_filtered = df_filtered[df_filtered["is_absorption"] == True]
+            elif absorption_filter == "MOMENTUM":
+                df_filtered = df_filtered[(df_filtered["is_absorption"] == False) | (df_filtered["is_absorption"].isna())]
+    
+    # Crear gráfico
     signal_fig = go.Figure()
+    
+    # Línea de precio (usar todos los datos para contexto)
     signal_fig.add_trace(go.Scatter(
         x=df["timestamp"], y=df["price"], 
         mode='lines', name='Precio', 
-        line=dict(color='blue', width=1)
+        line=dict(color='#6c757d', width=1),
+        opacity=0.5
     ))
     
-    # Añadir VWAP si está disponible
-    if "vwap_value" in df.columns and df["vwap_value"].notna().any():
+    # VWAP si está habilitado
+    show_vwap = display_options and "show_vwap" in display_options
+    if show_vwap and "vwap_value" in df.columns and df["vwap_value"].notna().any():
         signal_fig.add_trace(go.Scatter(
             x=df["timestamp"], y=df["vwap_value"], 
             mode='lines', name='VWAP', 
-            line=dict(color='orange', width=1, dash='dash')
+            line=dict(color='orange', width=1, dash='dash'),
+            opacity=0.7
         ))
     
-    buy_signals = df[df["signal_type"] == "BUY"]
+    # Señales filtradas
+    buy_signals = df_filtered[df_filtered["signal_type"] == "BUY"]
     if not buy_signals.empty:
-        # Tamaño del marcador basado en signal_strength si está disponible
         sizes = buy_signals.get("signal_strength", pd.Series([0.5] * len(buy_signals)))
-        sizes = (sizes.fillna(0.5) * 15 + 8).tolist()  # Escalar de 8 a 23
+        sizes = (sizes.fillna(0.5) * 15 + 8).tolist()
+        
+        # Colores según calidad
+        colors = []
+        for s in buy_signals.get("signal_strength", [0.5] * len(buy_signals)):
+            if pd.isna(s) or s is None:
+                colors.append('#28a745')
+            elif s >= 0.7:
+                colors.append('#00ff00')  # Verde brillante
+            elif s >= 0.5:
+                colors.append('#28a745')  # Verde normal
+            else:
+                colors.append('#90EE90')  # Verde claro
         
         signal_fig.add_trace(go.Scatter(
             x=buy_signals["timestamp"], y=buy_signals["price"], 
-            mode='markers', name='Compra (LONG)', 
-            marker=dict(color='green', size=sizes, symbol='triangle-up'),
-            text=buy_signals.get("signal_reason", ""),
-            hovertemplate="<b>LONG</b><br>Precio: %{y:.2f}<br>%{text}<extra></extra>"
+            mode='markers', name=f'BUY ({len(buy_signals)})', 
+            marker=dict(color=colors, size=sizes, symbol='triangle-up', line=dict(width=1, color='darkgreen')),
+            text=buy_signals.get("signal_reason", "").fillna(""),
+            customdata=buy_signals.get("signal_strength", pd.Series()).fillna(0).apply(lambda x: f"{x*100:.0f}%"),
+            hovertemplate="<b>LONG</b><br>Precio: $%{y:,.2f}<br>Calidad: %{customdata}<br>%{text}<extra></extra>"
         ))
     
-    sell_signals = df[df["signal_type"] == "SELL"]
+    sell_signals = df_filtered[df_filtered["signal_type"] == "SELL"]
     if not sell_signals.empty:
         sizes = sell_signals.get("signal_strength", pd.Series([0.5] * len(sell_signals)))
         sizes = (sizes.fillna(0.5) * 15 + 8).tolist()
         
+        colors = []
+        for s in sell_signals.get("signal_strength", [0.5] * len(sell_signals)):
+            if pd.isna(s) or s is None:
+                colors.append('#dc3545')
+            elif s >= 0.7:
+                colors.append('#ff0000')  # Rojo brillante
+            elif s >= 0.5:
+                colors.append('#dc3545')  # Rojo normal
+            else:
+                colors.append('#ffcccb')  # Rojo claro
+        
         signal_fig.add_trace(go.Scatter(
             x=sell_signals["timestamp"], y=sell_signals["price"], 
-            mode='markers', name='Venta (SHORT)', 
-            marker=dict(color='red', size=sizes, symbol='triangle-down'),
-            text=sell_signals.get("signal_reason", ""),
-            hovertemplate="<b>SHORT</b><br>Precio: %{y:.2f}<br>%{text}<extra></extra>"
+            mode='markers', name=f'SELL ({len(sell_signals)})', 
+            marker=dict(color=colors, size=sizes, symbol='triangle-down', line=dict(width=1, color='darkred')),
+            text=sell_signals.get("signal_reason", "").fillna(""),
+            customdata=sell_signals.get("signal_strength", pd.Series()).fillna(0).apply(lambda x: f"{x*100:.0f}%"),
+            hovertemplate="<b>SHORT</b><br>Precio: $%{y:,.2f}<br>Calidad: %{customdata}<br>%{text}<extra></extra>"
         ))
     
+    # Título dinámico
+    filter_desc = []
+    if type_filter != "ALL":
+        filter_desc.append(type_filter)
+    if quality_filter != "ALL":
+        quality_labels = {"HIGH": "Alta", "MEDIUM": "Media", "LOW": "Baja", "HIGH_MEDIUM": "Alta+Media"}
+        filter_desc.append(f"Calidad {quality_labels.get(quality_filter, quality_filter)}")
+    if absorption_filter != "ALL":
+        filter_desc.append("Absorción" if absorption_filter == "ABSORPTION" else "Momentum")
+    
+    title = f"Señales de Trading ({len(df_filtered)} de {len(df)} total)"
+    if filter_desc:
+        title += f" - Filtros: {', '.join(filter_desc)}"
+    
     signal_fig.update_layout(
-        title="Señales de Trading (tamaño = calidad de señal)", 
-        xaxis_title="Fecha", yaxis_title="Precio", height=500
+        title=title,
+        xaxis_title="Fecha", 
+        yaxis_title="Precio", 
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
-    # Tabla de señales con detalles
-    # Filtrar solo señales BUY y SELL
-    df_filtered = df[df["signal_type"].isin(["BUY", "SELL"])].copy()
+    # Estadísticas
+    stats_cards = []
+    if "signal_strength" in df_filtered.columns and not df_filtered.empty:
+        avg_strength = df_filtered["signal_strength"].mean() if df_filtered["signal_strength"].notna().any() else 0
+        high_quality = (df_filtered["signal_strength"] >= 0.7).sum() if df_filtered["signal_strength"].notna().any() else 0
+        absorption_count = df_filtered["is_absorption"].sum() if "is_absorption" in df_filtered.columns else 0
+        buy_count = (df_filtered["signal_type"] == "BUY").sum()
+        sell_count = (df_filtered["signal_type"] == "SELL").sum()
+        
+        stats_cards = dbc.Row([
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("Calidad Promedio"),
+                html.H4(f"{avg_strength*100:.1f}%", className="text-info mb-0")
+            ])], color="light")], md=2),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("Alta Calidad (≥70%)"),
+                html.H4(f"{high_quality}", className="text-success mb-0")
+            ])], color="light")], md=2),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("Absorción"),
+                html.H4(f"{absorption_count}", className="text-warning mb-0")
+            ])], color="light")], md=2),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("BUY (LONG)"),
+                html.H4(f"{buy_count}", className="text-success mb-0")
+            ])], color="light")], md=2),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("SELL (SHORT)"),
+                html.H4(f"{sell_count}", className="text-danger mb-0")
+            ])], color="light")], md=2),
+            dbc.Col([dbc.Card([dbc.CardBody([
+                html.H6("Total Filtrado"),
+                html.H4(f"{len(df_filtered)}", className="text-primary mb-0")
+            ])], color="light")], md=2),
+        ], className="mb-4")
     
+    # Tabla
     if df_filtered.empty:
-        signals_table = dbc.Alert("No hay señales BUY/SELL en este backtest.", color="warning")
+        signals_table = dbc.Alert("No hay señales que coincidan con los filtros.", color="warning")
     else:
-        # Preparar datos para la tabla
         def format_strength(val):
             if pd.isna(val) or val is None:
                 return "N/A"
@@ -999,43 +1217,37 @@ def render_signals_tab(tab, selected_backtest_id):
                 return "success"
             elif val >= 0.5:
                 return "warning"
-            else:
-                return "danger"
+            return "danger"
         
         table_rows = []
-        for _, row in df_filtered.iterrows():
+        for _, row in df_filtered.head(100).iterrows():
             signal_type = row.get("signal_type", "")
             strength = row.get("signal_strength")
-            zone = row.get("value_zone", "N/A")
-            reason = row.get("signal_reason", "N/A")
+            zone = row.get("value_zone", "")
+            reason = row.get("signal_reason", "")
             is_absorption = row.get("is_absorption", False)
             
-            # Badge de tipo de señal
             type_badge = dbc.Badge(
                 signal_type, 
                 color="success" if signal_type == "BUY" else "danger",
                 className="me-2"
             )
             
-            # Badge de calidad
             strength_badge = dbc.Badge(
                 format_strength(strength),
                 color=get_strength_color(strength),
                 className="me-2"
             )
             
-            # Badge de absorción
-            absorption_badge = dbc.Badge(
-                "Absorción", color="info", className="me-2"
-            ) if is_absorption else ""
+            absorption_badge = dbc.Badge("Absorción", color="info", className="me-2") if is_absorption else ""
             
             table_rows.append(html.Tr([
-                html.Td(row.get("timestamp", "")[:19] if row.get("timestamp") else ""),
+                html.Td(str(row.get("timestamp", ""))[:19]),
                 html.Td(type_badge),
                 html.Td(f"${row.get('price', 0):,.2f}"),
-                html.Td([strength_badge]),
+                html.Td(strength_badge),
                 html.Td(zone if zone else "N/A"),
-                html.Td([absorption_badge, reason[:50] if reason else "N/A"]),
+                html.Td([absorption_badge, str(reason)[:60] if reason else "N/A"]),
             ]))
         
         signals_table = dbc.Table([
@@ -1046,43 +1258,11 @@ def render_signals_tab(tab, selected_backtest_id):
                 html.Th("Calidad"),
                 html.Th("Zona"),
                 html.Th("Razón"),
-            ])),
-            html.Tbody(table_rows[:50])  # Limitar a 50 filas
+            ]), className="table-dark"),
+            html.Tbody(table_rows)
         ], bordered=True, striped=True, hover=True, responsive=True, size="sm")
     
-    # Estadísticas de calidad de señales
-    stats_cards = []
-    if "signal_strength" in df_filtered.columns and df_filtered["signal_strength"].notna().any():
-        avg_strength = df_filtered["signal_strength"].mean()
-        high_quality = (df_filtered["signal_strength"] >= 0.7).sum()
-        absorption_count = df_filtered.get("is_absorption", pd.Series([False])).sum()
-        
-        stats_cards = dbc.Row([
-            dbc.Col([dbc.Card([dbc.CardBody([
-                html.H5("Calidad Promedio"),
-                html.H3(f"{avg_strength*100:.1f}%", className="text-info")
-            ])])], md=3),
-            dbc.Col([dbc.Card([dbc.CardBody([
-                html.H5("Señales Alta Calidad"),
-                html.H3(f"{high_quality}/{len(df_filtered)}", className="text-success")
-            ])])], md=3),
-            dbc.Col([dbc.Card([dbc.CardBody([
-                html.H5("Señales Absorción"),
-                html.H3(f"{absorption_count}", className="text-warning")
-            ])])], md=3),
-            dbc.Col([dbc.Card([dbc.CardBody([
-                html.H5("Total Señales"),
-                html.H3(f"{len(df_filtered)}", className="text-primary")
-            ])])], md=3),
-        ], className="mb-4")
-    
-    return dbc.Container([
-        html.H3("Señales Generadas"),
-        stats_cards,
-        dcc.Graph(figure=signal_fig),
-        html.H4("Detalle de Señales", className="mt-4"),
-        signals_table
-    ], fluid=True)
+    return stats_cards, signal_fig, signals_table
 
 
 @app.callback(
