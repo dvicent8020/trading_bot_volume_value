@@ -53,7 +53,13 @@ class Backtester:
         exhaustion_lookback: int = 10,  # Período para detectar exhaustion
         # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
         trailing_atr_enabled: bool = False,  # Usar ATR para trailing stop en lugar de porcentaje fijo
-        trailing_atr_multiplier: float = 2.5  # Multiplicador ATR para distancia del trailing stop
+        trailing_atr_multiplier: float = 2.5,  # Multiplicador ATR para distancia del trailing stop
+        # SMART TRAILING STOP (Híbrido Inteligente)
+        smart_trailing_enabled: bool = False,  # Habilitar Smart Trailing Stop
+        smart_trailing_atr_base: float = 2.0,  # Multiplicador ATR base para distancia
+        smart_trailing_profit_phases: bool = True,  # Ajustar por fase de profit
+        smart_trailing_time_decay: bool = True,  # Ajustar por tiempo en trade
+        smart_trailing_breakeven_threshold: float = 0.03  # Profit mínimo para mover a breakeven (3%)
     ):
         """
         Inicializa el Backtester.
@@ -132,6 +138,13 @@ class Backtester:
         
         # Exhaustion Exit (Salida por divergencia CVD)
         self.exhaustion_exit_enabled = exhaustion_exit_enabled
+        
+        # Smart Trailing Stop (Híbrido Inteligente)
+        self.smart_trailing_enabled = smart_trailing_enabled
+        self.smart_trailing_atr_base = smart_trailing_atr_base
+        self.smart_trailing_profit_phases = smart_trailing_profit_phases
+        self.smart_trailing_time_decay = smart_trailing_time_decay
+        self.smart_trailing_breakeven_threshold = smart_trailing_breakeven_threshold
         self.exhaustion_lookback = exhaustion_lookback
         
         # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
@@ -207,6 +220,118 @@ class Backtester:
             return delta.cumsum()
         
         return pd.Series(0, index=data.index)
+    
+    def _calculate_smart_trailing_stop(
+        self,
+        position_type: str,  # 'LONG' o 'SHORT'
+        entry_price: float,
+        current_price: float,
+        extreme_price: float,  # highest_price para LONG, lowest_price para SHORT
+        atr_value: float,
+        bars_in_trade: int,
+        cvd_exhaustion: bool = False
+    ) -> float:
+        """
+        Calcula el Smart Trailing Stop (Híbrido Inteligente).
+        
+        Combina múltiples factores para determinar la distancia óptima del trailing stop:
+        1. ATR dinámico como base
+        2. Ajuste por fase de profit (más holgado al inicio, más ajustado con ganancias)
+        3. Ajuste por tiempo en trade (trades largos se ajustan más)
+        4. Ajuste por exhaustion (si se detecta, ajustar agresivamente)
+        5. Protección de breakeven después de cierto profit
+        
+        Args:
+            position_type: 'LONG' o 'SHORT'
+            entry_price: Precio de entrada de la posición
+            current_price: Precio actual
+            extreme_price: Máximo alcanzado (LONG) o mínimo alcanzado (SHORT)
+            atr_value: Valor actual del ATR
+            bars_in_trade: Número de velas desde la entrada
+            cvd_exhaustion: Si se detectó divergencia de exhaustion
+            
+        Returns:
+            Precio del trailing stop
+        """
+        # Calcular profit actual
+        if position_type == 'LONG':
+            current_profit_pct = (current_price - entry_price) / entry_price
+        else:  # SHORT
+            current_profit_pct = (entry_price - current_price) / entry_price
+        
+        # Base: ATR dinámico
+        base_distance = atr_value * self.smart_trailing_atr_base
+        
+        # Factor de ajuste inicial
+        distance_multiplier = 1.0
+        
+        # 1. Ajuste por FASE DE PROFIT
+        if self.smart_trailing_profit_phases:
+            if current_profit_pct < 0.02:
+                # Fase inicial (0-2%): dar más espacio para que respire
+                distance_multiplier = 1.8
+            elif current_profit_pct < 0.04:
+                # Profit bajo (2-4%): espacio moderado
+                distance_multiplier = 1.4
+            elif current_profit_pct < 0.06:
+                # Profit medio (4-6%): normal
+                distance_multiplier = 1.0
+            elif current_profit_pct < 0.10:
+                # Profit alto (6-10%): empezar a proteger
+                distance_multiplier = 0.7
+            else:
+                # Profit muy alto (>10%): proteger agresivamente
+                distance_multiplier = 0.5
+        
+        # 2. Ajuste por TIEMPO EN TRADE
+        if self.smart_trailing_time_decay:
+            if bars_in_trade > 50:
+                # Trade muy largo: ajustar agresivamente
+                distance_multiplier *= 0.6
+            elif bars_in_trade > 30:
+                # Trade largo: ajustar moderadamente
+                distance_multiplier *= 0.8
+            elif bars_in_trade > 15:
+                # Trade medio: ajuste leve
+                distance_multiplier *= 0.9
+            # Trade corto (<15 bars): sin ajuste adicional
+        
+        # 3. Ajuste por EXHAUSTION (divergencia CVD)
+        if cvd_exhaustion:
+            # Si hay señal de exhaustion, ajustar MUY agresivamente
+            distance_multiplier *= 0.4
+            logger.debug(f"Smart Trailing: Exhaustion detectado, multiplicador reducido a {distance_multiplier:.2f}")
+        
+        # Calcular distancia final
+        final_distance = base_distance * distance_multiplier
+        
+        # Calcular precio del stop
+        if position_type == 'LONG':
+            stop_price = extreme_price - final_distance
+            
+            # 4. Protección de BREAKEVEN
+            if current_profit_pct >= self.smart_trailing_breakeven_threshold:
+                # Mínimo: breakeven + 0.5%
+                min_stop = entry_price * 1.005
+                stop_price = max(stop_price, min_stop)
+                
+        else:  # SHORT
+            stop_price = extreme_price + final_distance
+            
+            # Protección de breakeven para SHORT
+            if current_profit_pct >= self.smart_trailing_breakeven_threshold:
+                # Máximo: breakeven - 0.5%
+                max_stop = entry_price * 0.995
+                stop_price = min(stop_price, max_stop)
+        
+        logger.debug(
+            f"Smart Trailing [{position_type}]: profit={current_profit_pct*100:.1f}%, "
+            f"bars={bars_in_trade}, base_dist={base_distance:.2f}, "
+            f"mult={distance_multiplier:.2f}, final_dist={final_distance:.2f}, "
+            f"stop={stop_price:.2f}"
+        )
+        
+        return stop_price
     
     def _detect_exhaustion_divergence(
         self,
@@ -442,8 +567,32 @@ class Backtester:
                             not trailing_stop_active and 
                             current_profit_pct >= self.trailing_stop_activation):
                             trailing_stop_active = True
-                            # MEJORA: Trailing Stop basado en ATR si está habilitado
-                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            
+                            # SMART TRAILING STOP (Híbrido Inteligente)
+                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                # Calcular barras en trade
+                                bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
+                                
+                                # Detectar exhaustion si está habilitado
+                                cvd_exhaustion = False
+                                if self.exhaustion_exit_enabled and cvd is not None:
+                                    cvd_exhaustion, _ = self._detect_exhaustion_divergence(
+                                        close_prices.iloc[:i+1], cvd.iloc[:i+1], 'LONG', self.exhaustion_lookback
+                                    )
+                                
+                                trailing_stop_price = self._calculate_smart_trailing_stop(
+                                    position_type='LONG',
+                                    entry_price=entry_price,
+                                    current_price=price,
+                                    extreme_price=highest_price,
+                                    atr_value=atr_values.iloc[i],
+                                    bars_in_trade=bars_in_trade,
+                                    cvd_exhaustion=cvd_exhaustion
+                                )
+                                logger.debug(f"Smart Trailing LARGO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
+                            
+                            # Trailing Stop basado en ATR (sin smart)
+                            elif self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
                                 trailing_stop_price = highest_price - trailing_distance
                                 logger.debug(f"Trailing stop LARGO (ATR) activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}, ATR_dist={trailing_distance:.2f}")
@@ -452,13 +601,33 @@ class Backtester:
                                 logger.debug(f"Trailing stop LARGO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled):
-                            # MEJORA: Usar ATR para distancia si está habilitado
-                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self.smart_trailing_enabled):
+                            # SMART TRAILING STOP (Híbrido Inteligente) - Actualización
+                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
+                                
+                                cvd_exhaustion = False
+                                if self.exhaustion_exit_enabled and cvd is not None:
+                                    cvd_exhaustion, _ = self._detect_exhaustion_divergence(
+                                        close_prices.iloc[:i+1], cvd.iloc[:i+1], 'LONG', self.exhaustion_lookback
+                                    )
+                                
+                                new_trailing_stop = self._calculate_smart_trailing_stop(
+                                    position_type='LONG',
+                                    entry_price=entry_price,
+                                    current_price=price,
+                                    extreme_price=highest_price,
+                                    atr_value=atr_values.iloc[i],
+                                    bars_in_trade=bars_in_trade,
+                                    cvd_exhaustion=cvd_exhaustion
+                                )
+                            # Trailing ATR (sin smart)
+                            elif self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
                                 new_trailing_stop = highest_price - trailing_distance
                             else:
                                 new_trailing_stop = highest_price * (1 - self.trailing_stop_distance)
+                            
                             if new_trailing_stop > trailing_stop_price:
                                 trailing_stop_price = new_trailing_stop
                                 logger.debug(f"Trailing stop LARGO actualizado en {results.index[i]}: nuevo={trailing_stop_price:.2f}")
@@ -663,8 +832,30 @@ class Backtester:
                             not trailing_stop_active and 
                             current_profit_pct >= self.trailing_stop_activation):
                             trailing_stop_active = True
-                            # MEJORA: Trailing Stop basado en ATR si está habilitado
-                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            
+                            # SMART TRAILING STOP (Híbrido Inteligente)
+                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
+                                
+                                cvd_exhaustion = False
+                                if self.exhaustion_exit_enabled and cvd is not None:
+                                    cvd_exhaustion, _ = self._detect_exhaustion_divergence(
+                                        close_prices.iloc[:i+1], cvd.iloc[:i+1], 'SHORT', self.exhaustion_lookback
+                                    )
+                                
+                                trailing_stop_price = self._calculate_smart_trailing_stop(
+                                    position_type='SHORT',
+                                    entry_price=entry_price,
+                                    current_price=price,
+                                    extreme_price=lowest_price,
+                                    atr_value=atr_values.iloc[i],
+                                    bars_in_trade=bars_in_trade,
+                                    cvd_exhaustion=cvd_exhaustion
+                                )
+                                logger.debug(f"Smart Trailing CORTO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
+                            
+                            # Trailing Stop basado en ATR (sin smart)
+                            elif self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
                                 trailing_stop_price = lowest_price + trailing_distance
                                 logger.debug(f"Trailing stop CORTO (ATR) activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}, ATR_dist={trailing_distance:.2f}")
@@ -673,13 +864,33 @@ class Backtester:
                                 logger.debug(f"Trailing stop CORTO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled):
-                            # MEJORA: Usar ATR para distancia si está habilitado
-                            if self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self.smart_trailing_enabled):
+                            # SMART TRAILING STOP (Híbrido Inteligente) - Actualización
+                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                                bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
+                                
+                                cvd_exhaustion = False
+                                if self.exhaustion_exit_enabled and cvd is not None:
+                                    cvd_exhaustion, _ = self._detect_exhaustion_divergence(
+                                        close_prices.iloc[:i+1], cvd.iloc[:i+1], 'SHORT', self.exhaustion_lookback
+                                    )
+                                
+                                new_trailing_stop = self._calculate_smart_trailing_stop(
+                                    position_type='SHORT',
+                                    entry_price=entry_price,
+                                    current_price=price,
+                                    extreme_price=lowest_price,
+                                    atr_value=atr_values.iloc[i],
+                                    bars_in_trade=bars_in_trade,
+                                    cvd_exhaustion=cvd_exhaustion
+                                )
+                            # Trailing ATR (sin smart)
+                            elif self.trailing_atr_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 trailing_distance = atr_values.iloc[i] * self.trailing_atr_multiplier
                                 new_trailing_stop = lowest_price + trailing_distance
                             else:
                                 new_trailing_stop = lowest_price * (1 + self.trailing_stop_distance)
+                            
                             if new_trailing_stop < trailing_stop_price:
                                 trailing_stop_price = new_trailing_stop
                                 logger.debug(f"Trailing stop CORTO actualizado en {results.index[i]}: nuevo={trailing_stop_price:.2f}")
