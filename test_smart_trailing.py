@@ -21,14 +21,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_test(timeframe: str, days: int, use_smart_trailing: bool, config_name: str):
+def run_test(timeframe: str, days: int, trailing_mode: str, config_name: str):
     """
     Ejecuta un backtest con la configuración especificada.
     
     Args:
         timeframe: Temporalidad (15m, 1h, 4h, 1d)
         days: Días de datos históricos
-        use_smart_trailing: Si usar Smart Trailing Stop
+        trailing_mode: 'traditional', 'smart_balanced', 'smart_conservative'
         config_name: Nombre de la configuración
         
     Returns:
@@ -75,21 +75,31 @@ def run_test(timeframe: str, days: int, use_smart_trailing: bool, config_name: s
             'atr_multiplier': 1.5,
         }
         
-        if use_smart_trailing:
-            # Smart Trailing Stop habilitado
-            backtester_params.update({
-                'smart_trailing_enabled': True,
-                'smart_trailing_atr_base': 2.0,
-                'smart_trailing_profit_phases': True,
-                'smart_trailing_time_decay': True,
-                'smart_trailing_breakeven_threshold': 0.03,
-                'trailing_stop_distance': None,  # No usar porcentaje fijo
-            })
-        else:
-            # Trailing tradicional
+        if trailing_mode == 'traditional':
+            # Trailing tradicional (0.5% fijo)
             backtester_params.update({
                 'smart_trailing_enabled': False,
-                'trailing_stop_distance': 0.005,  # 0.5% fijo
+                'trailing_stop_distance': 0.005,
+            })
+        elif trailing_mode == 'smart_balanced':
+            # Smart Trailing BALANCEADO (buena relación retorno/DD)
+            backtester_params.update({
+                'smart_trailing_enabled': True,
+                'smart_trailing_atr_base': 1.5,
+                'smart_trailing_profit_phases': True,
+                'smart_trailing_time_decay': True,
+                'smart_trailing_breakeven_threshold': 0.025,  # 2.5%
+                'trailing_stop_distance': None,
+            })
+        elif trailing_mode == 'smart_conservative':
+            # Smart Trailing CONSERVADOR (menor DD, menor retorno)
+            backtester_params.update({
+                'smart_trailing_enabled': True,
+                'smart_trailing_atr_base': 1.2,  # Más ajustado
+                'smart_trailing_profit_phases': True,
+                'smart_trailing_time_decay': True,
+                'smart_trailing_breakeven_threshold': 0.015,  # 1.5% - breakeven muy rápido
+                'trailing_stop_distance': None,
             })
         
         backtester = Backtester(**backtester_params)
@@ -112,7 +122,7 @@ def run_test(timeframe: str, days: int, use_smart_trailing: bool, config_name: s
             'config': config_name,
             'timeframe': timeframe,
             'days': days,
-            'smart_trailing': use_smart_trailing,
+            'trailing_mode': trailing_mode,
             'signals': (signals == 1).sum() + (signals == -1).sum(),
             'trades': metrics.get('num_trades', 0),
             'return_pct': metrics.get('total_return_pct', 0),
@@ -132,7 +142,7 @@ def run_test(timeframe: str, days: int, use_smart_trailing: bool, config_name: s
             'config': config_name,
             'timeframe': timeframe,
             'days': days,
-            'smart_trailing': use_smart_trailing,
+            'trailing_mode': trailing_mode,
             'error': str(e)
         }
 
@@ -162,7 +172,7 @@ def main():
         result_traditional = run_test(
             timeframe=tf,
             days=days,
-            use_smart_trailing=False,
+            trailing_mode='traditional',
             config_name='Tradicional (0.5%)'
         )
         all_results.append(result_traditional)
@@ -173,31 +183,41 @@ def main():
                   f"DD {result_traditional['drawdown']:6.1f}% | WR {result_traditional['win_rate']:.0f}% | "
                   f"AvgWin {result_traditional['avg_win']:.1f}% | MaxWin {result_traditional['max_win']:.1f}%")
         
-        # Test 2: Smart Trailing (Híbrido)
-        result_smart = run_test(
+        # Test 2: Smart Trailing Balanceado
+        result_balanced = run_test(
             timeframe=tf,
             days=days,
-            use_smart_trailing=True,
-            config_name='Smart Trailing'
+            trailing_mode='smart_balanced',
+            config_name='Smart Balanceado'
         )
-        all_results.append(result_smart)
+        all_results.append(result_balanced)
         
-        if 'error' not in result_smart:
-            print(f"   Smart Trailing          | {result_smart['trades']:3d} ops | "
-                  f"{result_smart['return_pct']:7.1f}% | Sharpe {result_smart['sharpe']:5.2f} | "
-                  f"DD {result_smart['drawdown']:6.1f}% | WR {result_smart['win_rate']:.0f}% | "
-                  f"AvgWin {result_smart['avg_win']:.1f}% | MaxWin {result_smart['max_win']:.1f}%")
+        if 'error' not in result_balanced:
+            print(f"   Smart Balanceado        | {result_balanced['trades']:3d} ops | "
+                  f"{result_balanced['return_pct']:7.1f}% | Sharpe {result_balanced['sharpe']:5.2f} | "
+                  f"DD {result_balanced['drawdown']:6.1f}% | WR {result_balanced['win_rate']:.0f}% | "
+                  f"AvgWin {result_balanced['avg_win']:.1f}% | MaxWin {result_balanced['max_win']:.1f}%")
+        
+        # Test 3: Smart Trailing Conservador
+        result_conservative = run_test(
+            timeframe=tf,
+            days=days,
+            trailing_mode='smart_conservative',
+            config_name='Smart Conservador'
+        )
+        all_results.append(result_conservative)
+        
+        if 'error' not in result_conservative:
+            print(f"   Smart Conservador       | {result_conservative['trades']:3d} ops | "
+                  f"{result_conservative['return_pct']:7.1f}% | Sharpe {result_conservative['sharpe']:5.2f} | "
+                  f"DD {result_conservative['drawdown']:6.1f}% | WR {result_conservative['win_rate']:.0f}% | "
+                  f"AvgWin {result_conservative['avg_win']:.1f}% | MaxWin {result_conservative['max_win']:.1f}%")
         
         # Comparación
-        if 'error' not in result_traditional and 'error' not in result_smart:
-            ret_diff = result_smart['return_pct'] - result_traditional['return_pct']
-            avg_win_diff = result_smart['avg_win'] - result_traditional['avg_win']
-            max_win_diff = result_smart['max_win'] - result_traditional['max_win']
-            
-            print(f"\n   📈 Diferencia Smart vs Tradicional:")
-            print(f"      Retorno: {ret_diff:+.1f}%")
-            print(f"      Avg Win: {avg_win_diff:+.2f}%")
-            print(f"      Max Win: {max_win_diff:+.2f}%")
+        if 'error' not in result_traditional and 'error' not in result_balanced:
+            print(f"\n   📈 vs Tradicional:")
+            print(f"      Balanceado:   Ret {result_balanced['return_pct'] - result_traditional['return_pct']:+.1f}%, DD {result_balanced['drawdown'] - result_traditional['drawdown']:+.1f}%")
+            print(f"      Conservador:  Ret {result_conservative['return_pct'] - result_traditional['return_pct']:+.1f}%, DD {result_conservative['drawdown'] - result_traditional['drawdown']:+.1f}%")
     
     # Resumen Final
     print("\n" + "="*100)
@@ -222,10 +242,9 @@ def main():
         
         # Comparación por tipo de trailing
         print("\n📊 PROMEDIO POR TIPO DE TRAILING:")
-        for smart in [False, True]:
-            subset = df_results[df_results['smart_trailing'] == smart]
+        for config_type in ['Tradicional (0.5%)', 'Smart Balanceado', 'Smart Conservador']:
+            subset = df_results[df_results['config'] == config_type]
             if not subset.empty:
-                config_type = "Smart Trailing" if smart else "Tradicional"
                 print(f"\n   {config_type}:")
                 print(f"      Retorno promedio: {subset['return_pct'].mean():.1f}%")
                 print(f"      Sharpe promedio:  {subset['sharpe'].mean():.2f}")

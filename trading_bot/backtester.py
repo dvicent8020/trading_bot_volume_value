@@ -54,12 +54,12 @@ class Backtester:
         # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
         trailing_atr_enabled: bool = False,  # Usar ATR para trailing stop en lugar de porcentaje fijo
         trailing_atr_multiplier: float = 2.5,  # Multiplicador ATR para distancia del trailing stop
-        # SMART TRAILING STOP (Híbrido Inteligente)
+        # SMART TRAILING STOP (Híbrido Inteligente) - VERSIÓN CONSERVADORA
         smart_trailing_enabled: bool = False,  # Habilitar Smart Trailing Stop
-        smart_trailing_atr_base: float = 2.0,  # Multiplicador ATR base para distancia
+        smart_trailing_atr_base: float = 1.5,  # Multiplicador ATR base (reducido de 2.0)
         smart_trailing_profit_phases: bool = True,  # Ajustar por fase de profit
         smart_trailing_time_decay: bool = True,  # Ajustar por tiempo en trade
-        smart_trailing_breakeven_threshold: float = 0.03  # Profit mínimo para mover a breakeven (3%)
+        smart_trailing_breakeven_threshold: float = 0.02  # Profit mínimo para breakeven (reducido de 3% a 2%)
     ):
         """
         Inicializa el Backtester.
@@ -265,36 +265,39 @@ class Backtester:
         # Factor de ajuste inicial
         distance_multiplier = 1.0
         
-        # 1. Ajuste por FASE DE PROFIT
+        # 1. Ajuste por FASE DE PROFIT (BALANCEADO - proteger ganancias sin cerrar muy pronto)
         if self.smart_trailing_profit_phases:
-            if current_profit_pct < 0.02:
-                # Fase inicial (0-2%): dar más espacio para que respire
-                distance_multiplier = 1.8
-            elif current_profit_pct < 0.04:
-                # Profit bajo (2-4%): espacio moderado
+            if current_profit_pct < 0.01:
+                # Fase muy inicial (0-1%): dar espacio pero no demasiado
                 distance_multiplier = 1.4
-            elif current_profit_pct < 0.06:
-                # Profit medio (4-6%): normal
+            elif current_profit_pct < 0.02:
+                # Fase inicial (1-2%): espacio moderado
+                distance_multiplier = 1.2
+            elif current_profit_pct < 0.04:
+                # Profit bajo (2-4%): normal
                 distance_multiplier = 1.0
+            elif current_profit_pct < 0.06:
+                # Profit medio (4-6%): empezar a proteger
+                distance_multiplier = 0.8
             elif current_profit_pct < 0.10:
-                # Profit alto (6-10%): empezar a proteger
-                distance_multiplier = 0.7
+                # Profit alto (6-10%): proteger
+                distance_multiplier = 0.6
             else:
                 # Profit muy alto (>10%): proteger agresivamente
-                distance_multiplier = 0.5
+                distance_multiplier = 0.4
         
-        # 2. Ajuste por TIEMPO EN TRADE
+        # 2. Ajuste por TIEMPO EN TRADE (BALANCEADO - decay progresivo)
         if self.smart_trailing_time_decay:
-            if bars_in_trade > 50:
+            if bars_in_trade > 60:
                 # Trade muy largo: ajustar agresivamente
-                distance_multiplier *= 0.6
-            elif bars_in_trade > 30:
+                distance_multiplier *= 0.55
+            elif bars_in_trade > 40:
                 # Trade largo: ajustar moderadamente
-                distance_multiplier *= 0.8
-            elif bars_in_trade > 15:
+                distance_multiplier *= 0.7
+            elif bars_in_trade > 20:
                 # Trade medio: ajuste leve
-                distance_multiplier *= 0.9
-            # Trade corto (<15 bars): sin ajuste adicional
+                distance_multiplier *= 0.85
+            # Trade corto (<20 bars): sin ajuste adicional
         
         # 3. Ajuste por EXHAUSTION (divergencia CVD)
         if cvd_exhaustion:
