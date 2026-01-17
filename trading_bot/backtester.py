@@ -59,7 +59,9 @@ class Backtester:
         smart_trailing_atr_base: float = 1.5,  # Multiplicador ATR base (reducido de 2.0)
         smart_trailing_profit_phases: bool = True,  # Ajustar por fase de profit
         smart_trailing_time_decay: bool = True,  # Ajustar por tiempo en trade
-        smart_trailing_breakeven_threshold: float = 0.02  # Profit mínimo para breakeven (reducido de 3% a 2%)
+        smart_trailing_breakeven_threshold: float = 0.02,  # Profit mínimo para breakeven (reducido de 3% a 2%)
+        # SELECCIÓN AUTOMÁTICA DE TRAILING
+        auto_trailing_selection: bool = False  # Selección automática: Smart para 15m/1h, Tradicional para 4h/1d
     ):
         """
         Inicializa el Backtester.
@@ -147,6 +149,11 @@ class Backtester:
         self.smart_trailing_breakeven_threshold = smart_trailing_breakeven_threshold
         self.exhaustion_lookback = exhaustion_lookback
         
+        # Selección Automática de Trailing
+        self.auto_trailing_selection = auto_trailing_selection
+        # Este valor se determinará en run_backtest basado en el timeframe detectado
+        self._effective_smart_trailing = smart_trailing_enabled
+        
         # MEJORA DEL EXPERTO: Trailing Stop basado en ATR
         self.trailing_atr_enabled = trailing_atr_enabled
         self.trailing_atr_multiplier = trailing_atr_multiplier
@@ -195,6 +202,64 @@ class Backtester:
         
         atr = true_range.rolling(window=period).mean()
         return atr
+    
+    def _detect_timeframe(self, data: pd.DataFrame) -> str:
+        """
+        Detecta el timeframe de los datos basándose en el índice.
+        
+        Args:
+            data: DataFrame con índice DatetimeIndex.
+            
+        Returns:
+            String con el timeframe detectado ('15m', '1h', '4h', '1d').
+        """
+        if not isinstance(data.index, pd.DatetimeIndex) or len(data) < 2:
+            logger.warning("No se pudo detectar timeframe, usando '4h' por defecto")
+            return '4h'
+        
+        # Calcular diferencia de tiempo entre las primeras velas
+        time_diff = data.index[1] - data.index[0]
+        
+        # Clasificar por timeframe
+        if time_diff <= pd.Timedelta(minutes=20):
+            return '15m'
+        elif time_diff <= pd.Timedelta(hours=1, minutes=30):
+            return '1h'
+        elif time_diff <= pd.Timedelta(hours=5):
+            return '4h'
+        else:
+            return '1d'
+    
+    def _determine_trailing_type(self, timeframe: str) -> dict:
+        """
+        Determina el tipo de trailing óptimo basado en el timeframe.
+        
+        Basado en los resultados de backtesting:
+        - 15m/1h: Smart Trailing (mejor rendimiento +30% más retorno)
+        - 4h/1d: Tradicional (más estable, menor drawdown)
+        
+        Args:
+            timeframe: String con el timeframe ('15m', '1h', '4h', '1d').
+            
+        Returns:
+            Dict con la configuración de trailing.
+        """
+        if timeframe in ['15m', '1h']:
+            # Smart Trailing - Mejor para timeframes cortos
+            return {
+                'use_smart': True,
+                'atr_base': 1.5,  # Versión balanceada
+                'profit_phases': True,
+                'time_decay': True,
+                'breakeven_threshold': 0.025,  # 2.5%
+                'reason': f'Smart Trailing seleccionado para {timeframe} (mejor rendimiento en TF cortos)'
+            }
+        else:
+            # Trailing Tradicional - Mejor para timeframes largos
+            return {
+                'use_smart': False,
+                'reason': f'Trailing Tradicional seleccionado para {timeframe} (más estable en TF largos)'
+            }
     
     def _calculate_cvd(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -447,6 +512,26 @@ class Backtester:
             
             logger.info(f"Iniciando backtest sobre {len(data)} períodos")
             
+            # SELECCIÓN AUTOMÁTICA DE TRAILING
+            if self.auto_trailing_selection:
+                detected_tf = self._detect_timeframe(data)
+                trailing_config = self._determine_trailing_type(detected_tf)
+                logger.info(f"📊 Auto-Trailing: {trailing_config['reason']}")
+                
+                if trailing_config['use_smart']:
+                    # Activar Smart Trailing con configuración óptima
+                    self._effective_smart_trailing = True
+                    self.smart_trailing_atr_base = trailing_config['atr_base']
+                    self.smart_trailing_profit_phases = trailing_config['profit_phases']
+                    self.smart_trailing_time_decay = trailing_config['time_decay']
+                    self.smart_trailing_breakeven_threshold = trailing_config['breakeven_threshold']
+                else:
+                    # Usar trailing tradicional
+                    self._effective_smart_trailing = False
+            else:
+                # Usar la configuración manual
+                self._effective_smart_trailing = self.smart_trailing_enabled
+            
             # Inicializar variables
             capital = self.initial_capital
             available_capital = self.initial_capital  # Capital disponible para nuevas posiciones
@@ -572,7 +657,7 @@ class Backtester:
                             trailing_stop_active = True
                             
                             # SMART TRAILING STOP (Híbrido Inteligente)
-                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            if self._effective_smart_trailing and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 # Calcular barras en trade
                                 bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
                                 
@@ -604,9 +689,9 @@ class Backtester:
                                 logger.debug(f"Trailing stop LARGO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self.smart_trailing_enabled):
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self._effective_smart_trailing):
                             # SMART TRAILING STOP (Híbrido Inteligente) - Actualización
-                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            if self._effective_smart_trailing and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
                                 
                                 cvd_exhaustion = False
@@ -837,7 +922,7 @@ class Backtester:
                             trailing_stop_active = True
                             
                             # SMART TRAILING STOP (Híbrido Inteligente)
-                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            if self._effective_smart_trailing and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
                                 
                                 cvd_exhaustion = False
@@ -867,9 +952,9 @@ class Backtester:
                                 logger.debug(f"Trailing stop CORTO activado en {results.index[i]}: precio={price:.2f}, trailing_stop={trailing_stop_price:.2f}")
                         
                         # Actualizar trailing stop si está activo
-                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self.smart_trailing_enabled):
+                        if trailing_stop_active and (self.trailing_stop_distance is not None or self.trailing_atr_enabled or self._effective_smart_trailing):
                             # SMART TRAILING STOP (Híbrido Inteligente) - Actualización
-                            if self.smart_trailing_enabled and atr_values is not None and not pd.isna(atr_values.iloc[i]):
+                            if self._effective_smart_trailing and atr_values is not None and not pd.isna(atr_values.iloc[i]):
                                 bars_in_trade = i - current_entry_index if current_entry_index is not None else 0
                                 
                                 cvd_exhaustion = False
